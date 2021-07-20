@@ -1,6 +1,6 @@
 import os
 
-import cv2
+import cv2 # pip install opencv-python
 import numpy as np
 import pandas as pd
 import torch
@@ -13,30 +13,40 @@ torch.manual_seed(1234)
 TRAIN_SIZE = 0.8
 NUM_PTS = 971
 SUBMISSION_HEADER = "file_name,Point_M0_X,Point_M0_Y,Point_M1_X,Point_M1_Y,Point_M2_X,Point_M2_Y,Point_M3_X,Point_M3_Y,Point_M4_X,Point_M4_Y,Point_M5_X,Point_M5_Y,Point_M6_X,Point_M6_Y,Point_M7_X,Point_M7_Y,Point_M8_X,Point_M8_Y,Point_M9_X,Point_M9_Y,Point_M10_X,Point_M10_Y,Point_M11_X,Point_M11_Y,Point_M12_X,Point_M12_Y,Point_M13_X,Point_M13_Y,Point_M14_X,Point_M14_Y,Point_M15_X,Point_M15_Y,Point_M16_X,Point_M16_Y,Point_M17_X,Point_M17_Y,Point_M18_X,Point_M18_Y,Point_M19_X,Point_M19_Y,Point_M20_X,Point_M20_Y,Point_M21_X,Point_M21_Y,Point_M22_X,Point_M22_Y,Point_M23_X,Point_M23_Y,Point_M24_X,Point_M24_Y,Point_M25_X,Point_M25_Y,Point_M26_X,Point_M26_Y,Point_M27_X,Point_M27_Y,Point_M28_X,Point_M28_Y,Point_M29_X,Point_M29_Y\n"
-STORE_RESULTS_PATH = 'content/drive/MyDrive/Colab Notebooks/CV/HW1/runs'
+#STORE_RESULTS_PATH = 'content/drive/MyDrive/Colab Notebooks/CV/HW1/runs'
+
 
 class ScaleMinSideToSize(object):
+    """
+    Сжатие размеров изображения. Коэффициент сжатия определяется по меньшей стороне!
+    """
     def __init__(self, size, elem_name='image'):
-        # self.size = torch.tensor(size, dtype=torch.float)
         self.size = np.asarray(size, dtype=np.float)
         self.elem_name = elem_name
 
-    # определяю коэффициент сжатия f, выполняю resize изображения
+    # определяю коэффициент сжатия f
     def __call__(self, sample):
+        """
+        sample - это словарь:
+        sample['image'] - это RGB матрица изображения
+        sample['landmarks'] - матрица 971 x 2 с разметкой
+        как создается sample - см. ThousandLandmarksDataset.__getitem__
+        """
         h, w, _ = sample[self.elem_name].shape
-        if h > w:
-            f = self.size[0] / w
-        else:
+        if h < w:
             f = self.size[1] / h
+        else:
+            f = self.size[0] / w
 
+        # выполняю resize изображения
         sample[self.elem_name] = cv2.resize(sample[self.elem_name], None, fx=f, fy=f, interpolation=cv2.INTER_AREA)
         sample["scale_coef"] = f
 
         # выполняю корректировку разметки по коэффициенту f
         if 'landmarks' in sample:
-            landmarks = sample['landmarks'].reshape(-1, 2).float()
+            landmarks = sample['landmarks'].reshape(-1, 2).float
             landmarks = landmarks * f
-            sample['landmarks'] = landmarks.reshape(-1)
+            sample['landmarks'] = landmarks.reshape(-1) # TODO Почему сначала reshape(-1, 2), а затем reshape(-1)?
 
         return sample
 
@@ -60,7 +70,9 @@ class CropCenter(object):
         # выполняю также корректировку разметки
         if 'landmarks' in sample:
             landmarks = sample['landmarks'].reshape(-1, 2)
+            # смещаю всю разметку на размеры отступов, которые я срезал
             landmarks -= torch.tensor((margin_w, margin_h), dtype=landmarks.dtype)[None, :]
+            # [None, :] превращает tensor([margin_w, margin_h]) -> tensor([[margin_w, margin_h]])
             sample['landmarks'] = landmarks.reshape(-1)
 
         return sample
@@ -81,21 +93,25 @@ class TransformByKeys(object):
 
 class ThousandLandmarksDataset(data.Dataset):
     def __init__(self, root, transforms, split="train"):
-        super(ThousandLandmarksDataset, self).__init__()
-        self.root = root
-        landmark_file_name = os.path.join(root, 'landmarks.csv') if split != "test" \
-            else os.path.join(root, "test_points.csv")
-        images_root = os.path.join(root, "images")
+        super(ThousandLandmarksDataset, self).__init__() # вызываем __init__ метод родителя data.Dataset
 
+        # путь к данным
+        self.root = root
+        landmark_file_name = os.path.join(root, 'landmarks.csv') if split != "test" else os.path.join(root, "test_points.csv")
+        images_folder_name = os.path.join(root, "images")
         self.image_names = []
         self.landmarks = []
 
+        # количество строк (примеров) в файле landmark_file_name
         with open(landmark_file_name, "rt") as fp:
             num_lines = sum(1 for line in fp)
         num_lines -= 1  # header
 
+        # чтение разметки
         with open(landmark_file_name, "rt") as fp:
             for i, line in tqdm.tqdm(enumerate(fp), total=num_lines + 1):
+
+                # разделение строк на train, val
                 if i == 0:
                     continue  # skip header
                 if split == "train" and i == int(TRAIN_SIZE * num_lines):
@@ -103,12 +119,14 @@ class ThousandLandmarksDataset(data.Dataset):
                 elif split == "val" and i < int(TRAIN_SIZE * num_lines):
                     continue  # has not reached start of val part of data
                 elements = line.strip().split("\t")
-                image_name = os.path.join(images_root, elements[0])
+                image_name = os.path.join(images_folder_name, elements[0]) # нулевой элемент - имя файла
                 self.image_names.append(image_name)
 
+                # чтение разметки
                 if split in ("train", "val"):
                     landmarks = list(map(np.int, elements[1:]))
                     landmarks = np.array(landmarks, dtype=np.int).reshape((len(landmarks) // 2, 2))
+                    # для каждого файла landmarks - это матрица рамера 971 X 2
                     self.landmarks.append(landmarks)
 
         if split in ("train", "val"):
@@ -118,6 +136,7 @@ class ThousandLandmarksDataset(data.Dataset):
 
         self.transforms = transforms
 
+    # метод, который возвращает экземпляр c
     def __getitem__(self, idx):
         sample = {}
         if self.landmarks is not None:
@@ -128,6 +147,7 @@ class ThousandLandmarksDataset(data.Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         sample["image"] = image
 
+        # серия трансформаций изображения (ScaleMinSideToSize, CropCenter, ToPILImage ... определяются при запуске)
         if self.transforms is not None:
             sample = self.transforms(sample)
 
@@ -137,13 +157,13 @@ class ThousandLandmarksDataset(data.Dataset):
         return len(self.image_names)
 
 
-# эта функция нигде не используется
-def restore_landmarks(landmarks, f, margins):
-    dx, dy = margins
-    landmarks[:, 0] += dx
-    landmarks[:, 1] += dy
-    landmarks /= f
-    return landmarks
+# # эта функция нигде не используется
+# def restore_landmarks(landmarks, f, margins):
+#     dx, dy = margins
+#     landmarks[:, 0] += dx
+#     landmarks[:, 1] += dy
+#     landmarks /= f
+#     return landmarks
 
 
 def restore_landmarks_batch(landmarks, fs, margins_x, margins_y):

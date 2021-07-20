@@ -21,28 +21,6 @@ env*/
 
 
 # My temp folders, files
+model.egg-info/
 content/
 contest01_data.zip
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-__pycache__/
-.idea/
-.ipynb_checkpoints/
-temp/

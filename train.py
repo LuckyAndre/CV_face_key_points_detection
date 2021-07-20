@@ -6,13 +6,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision.models as models
-import tqdm
 from torch.nn import functional as fnn
 from torch.utils.data import DataLoader
+import torchvision.models as models
 from torchvision import transforms
+import tqdm
 
-from utils import NUM_PTS, STORE_RESULTS_PATH
+from utils import NUM_PTS #, STORE_RESULTS_PATH
 from utils import ScaleMinSideToSize, CropCenter, TransformByKeys
 from utils import ThousandLandmarksDataset
 from utils import restore_landmarks_batch, create_submission
@@ -24,11 +24,10 @@ torch.backends.cudnn.deterministic = True
 
 def parse_arguments():
     parser = ArgumentParser(__doc__)
-    parser.add_argument("--name", "-n", help="Experiment name (for saving checkpoints and submits).",
-                        default="baseline")
+    parser.add_argument("--name", "-n", help="Experiment name (for saving checkpoints and submits).", default="baseline")
     parser.add_argument("--data", "-d", help="Path to dir with target images & landmarks.", default=None)
     parser.add_argument("--crop-size", "-c", default=224, type=int)
-    parser.add_argument("--batch-size", "-b", default=64, type=int)  # 512 is OK for resnet18 finetuning @ 3GB of VRAM
+    parser.add_argument("--batch-size", "-b", default=64, type=int)
     parser.add_argument("--epochs", "-e", default=1, type=int)
     parser.add_argument("--learning-rate", "-lr", default=1e-3, type=float)
     parser.add_argument("--gpu", action="store_true")
@@ -117,7 +116,7 @@ def main(args):
         CropCenter(args.crop_size),
         TransformByKeys(transforms.ToPILImage(), ("image",)),
         TransformByKeys(transforms.ToTensor(), ("image",)),
-        TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
+        TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)), # TODO check coordinates
     ])
 
     print("Reading data...")
