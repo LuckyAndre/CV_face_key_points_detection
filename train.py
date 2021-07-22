@@ -20,8 +20,6 @@ from utils import ScaleMinSideToSize, CropCenter, TransformByKeys
 from utils import ThousandLandmarksDataset
 from utils import restore_landmarks_batch, create_submission
 
-STORE_RESULTS_PATH = 'content/drive/MyDrive/Colab Notebooks/CV/HW1/runs'
-
 # Reproducibility
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
@@ -149,7 +147,7 @@ def main(args):
         print("Epoch #{:2}:\ttrain loss: {:5.2}\tval loss: {:5.2}".format(epoch, train_loss, val_loss))
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            with open(os.path.join(STORE_RESULTS_PATH, f"{args.name}_best.pth"), "wb") as fp:
+            with open(os.path.join(args.data, 'runs', f"{args.name}_best.pth"), "wb") as fp:
                 torch.save(model.state_dict(), fp)
 
     # 3. predict
@@ -158,21 +156,21 @@ def main(args):
                                  shuffle=False, drop_last=False)
 
     # load model
-    with open(os.path.join(STORE_RESULTS_PATH, f"{args.name}_best.pth"), "rb") as fp:
+    with open(os.path.join(args.data, 'runs', f"{args.name}_best.pth"), "rb") as fp:
         best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
         model.load_state_dict(best_state_dict)
 
     # save prediction
     test_predictions = predict(model, test_dataloader, device)
-    with open(os.path.join(STORE_RESULTS_PATH, f"{args.name}_test_predictions.pkl"), "wb") as fp:
+    with open(os.path.join(args.data, 'runs', f"{args.name}_test_predictions.pkl"), "wb") as fp:
         pickle.dump({"image_names": test_dataset.image_names,
                      "landmarks": test_predictions}, fp)
 
     # save time
-    with open(os.path.join(STORE_RESULTS_PATH, f"{args.name}_time.txt"), 'w') as outfile:
+    with open(os.path.join(args.data, 'runs', f"{args.name}_time.txt"), 'w') as outfile:
         json.dump(time_counter, outfile)
 
-    # create_submission(args.data, test_predictions, os.path.join(STORE_RESULTS_PATH, f"{args.name}_submit.csv"))
+    # create_submission(args.data, test_predictions, os.path.join(args.data, 'runs', f"{args.name}_submit.csv"))
 
 
 # if __name__ == "__main__":
