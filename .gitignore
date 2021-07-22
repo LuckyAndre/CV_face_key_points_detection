@@ -23,4 +23,5 @@ env*/
 # My temp folders, files
 model.egg-info/
 content/
+temp/
 contest01_data.zip

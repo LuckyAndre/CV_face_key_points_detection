@@ -9,11 +9,13 @@ setup(
     install_requires=[
         "torch == 1.9.0",
         "torchvision == 0.10.0",
-        "opencv-python == 4.5.3.56",
+        "opencv-python == 4.5.3.56", # cv2
         "pandas == 1.2.4",
         "scikit-learn == 0.24.2",
         "notebook == 6.4.0",
         "matplotlib == 3.4.2",
-        "tqdm == 4.61.2"
+        "tqdm == 4.61.2",
+        "ipdb == 0.13.9",
+        "ipywidgets == 7.6.3"
     ]
 )

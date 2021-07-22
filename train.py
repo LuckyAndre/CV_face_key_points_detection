@@ -1,6 +1,8 @@
 import os
 import pickle
 from argparse import ArgumentParser
+from datetime import datetime
+import json
 
 import numpy as np
 import torch
@@ -11,11 +13,14 @@ from torch.utils.data import DataLoader
 import torchvision.models as models
 from torchvision import transforms
 import tqdm
+from ipdb import set_trace
 
-from utils import NUM_PTS #, STORE_RESULTS_PATH
+from utils import NUM_PTS
 from utils import ScaleMinSideToSize, CropCenter, TransformByKeys
 from utils import ThousandLandmarksDataset
 from utils import restore_landmarks_batch, create_submission
+
+STORE_RESULTS_PATH = 'content/drive/MyDrive/Colab Notebooks/CV/HW1/runs'
 
 # Reproducibility
 torch.backends.cudnn.benchmark = False
@@ -35,27 +40,21 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def train(model, loader, loss_fn, optimizer, device):
+def train(model, loader, loss_fn, optimizer, device): # loader возвращает набор всех батчей из датасета
     model.train()
     train_loss = []
+
     for batch in tqdm.tqdm(loader, total=len(loader), desc="training..."):
+        # данные
         images = batch["image"].to(device)  # B x 3 x CROP_SIZE x CROP_SIZE
-        landmarks = batch["landmarks"]  # B x (2 * NUM_PTS)
-        pred_landmarks = model(images).cpu()  # B x (2 * NUM_PTS)
+        landmarks = batch["landmarks"]  # B x 1942
 
-        #### calculate loss on true image size
-        fs = batch["scale_coef"].numpy()  # B
-        margins_x = batch["crop_margin_x"].numpy()  # B
-        margins_y = batch["crop_margin_y"].numpy()  # B
-        landmarks2 = landmarks.numpy().reshape((len(landmarks), NUM_PTS, 2))  # B x NUM_PTS x 2
-        landmarks2 = restore_landmarks_batch(landmarks2, fs, margins_x, margins_y).reshape((len(landmarks2), NUM_PTS * 2))  # B x NUM_PTS * 2
-        pred_landmarks2 = pred_landmarks.detach().numpy().reshape((len(pred_landmarks), NUM_PTS, 2))  # B x NUM_PTS x 2
-        pred_landmarks2 = restore_landmarks_batch(pred_landmarks2, fs, margins_x, margins_y).reshape((len(pred_landmarks2), NUM_PTS * 2))  # B x NUM_PTS * 2
-        loss_full_size_image = loss_fn(torch.tensor(pred_landmarks2), torch.tensor(landmarks2), reduction="mean")
+        # прогноз и качество
+        pred_landmarks = model(images).cpu()  # B x 1942 # TODO почему на CPU?
+        loss = loss_fn(pred_landmarks, landmarks, reduction="mean")
+        train_loss.append(loss.item())
 
-        loss = loss_fn(pred_landmarks, landmarks, reduction="mean") # gradient loss
-        train_loss.append(loss_full_size_image.item())
-
+        # градиентный спуск
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -66,25 +65,15 @@ def train(model, loader, loss_fn, optimizer, device):
 def validate(model, loader, loss_fn, device):
     model.eval()
     val_loss = []
+
     for batch in tqdm.tqdm(loader, total=len(loader), desc="validation..."):
         images = batch["image"].to(device)
         landmarks = batch["landmarks"]
 
         with torch.no_grad():
             pred_landmarks = model(images).cpu()
-
-        #### calculate loss on true image size
-        fs = batch["scale_coef"].numpy()  # B
-        margins_x = batch["crop_margin_x"].numpy()  # B
-        margins_y = batch["crop_margin_y"].numpy()  # B
-        landmarks2 = landmarks.numpy().reshape((len(landmarks), NUM_PTS, 2))  # B x NUM_PTS x 2
-        landmarks2 = restore_landmarks_batch(landmarks2, fs, margins_x, margins_y).reshape((len(landmarks2), NUM_PTS * 2))  # B x NUM_PTS * 2
-        pred_landmarks2 = pred_landmarks.detach().numpy().reshape((len(pred_landmarks), NUM_PTS, 2))  # B x NUM_PTS x 2
-        pred_landmarks2 = restore_landmarks_batch(pred_landmarks2, fs, margins_x, margins_y).reshape((len(pred_landmarks2), NUM_PTS * 2))  # B x NUM_PTS * 2
-        loss_full_size_image = loss_fn(torch.tensor(pred_landmarks2), torch.tensor(landmarks2), reduction="mean")
-
-        #loss = loss_fn(pred_landmarks, landmarks, reduction="mean")
-        val_loss.append(loss_full_size_image.item())
+        loss = loss_fn(pred_landmarks, landmarks, reduction="mean")
+        val_loss.append(loss.item())
 
     return np.mean(val_loss)
 
@@ -92,13 +81,15 @@ def validate(model, loader, loss_fn, device):
 def predict(model, loader, device):
     model.eval()
     predictions = np.zeros((len(loader.dataset), NUM_PTS, 2))
+
     for i, batch in enumerate(tqdm.tqdm(loader, total=len(loader), desc="test prediction...")):
         images = batch["image"].to(device)
 
         with torch.no_grad():
-            pred_landmarks = model(images).cpu()
+            pred_landmarks = model(images).cpu() # B x 1942
         pred_landmarks = pred_landmarks.numpy().reshape((len(pred_landmarks), NUM_PTS, 2))  # B x NUM_PTS x 2
 
+        # преобразование прогноза к размерам исходного изображения
         fs = batch["scale_coef"].numpy()  # B
         margins_x = batch["crop_margin_x"].numpy()  # B
         margins_y = batch["crop_margin_y"].numpy()  # B
@@ -116,38 +107,44 @@ def main(args):
         CropCenter(args.crop_size),
         TransformByKeys(transforms.ToPILImage(), ("image",)),
         TransformByKeys(transforms.ToTensor(), ("image",)),
-        TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)), # TODO check coordinates
+        TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
     ])
 
     print("Reading data...")
-    train_dataset = ThousandLandmarksDataset(os.path.join(args.data, "train"), train_transforms, split="train")
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
-                                  shuffle=True, drop_last=True)
-    val_dataset = ThousandLandmarksDataset(os.path.join(args.data, "train"), train_transforms, split="val")
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
-                                shuffle=False, drop_last=False)
+    train_dataset = ThousandLandmarksDataset(os.path.join(args.data, "train_short"), train_transforms, split="train")
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=True, drop_last=True)
+    val_dataset = ThousandLandmarksDataset(os.path.join(args.data, "train_short"), train_transforms, split="val")
+    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
     device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
 
     print("Creating model...")
-    model = models.resnext50_32x4d(pretrained=True)
+    model = models.resnet18(pretrained=True)
     model.requires_grad_(True)
-    # Меняем слой fc модели resnet18 на новый fc слой, который переобучим под нашу задачу
+    # Меняем слой fc предобученной модели на новый fc слой, который переобучим под нашу задачу
     model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
     model.fc.requires_grad_(True)
-
     model.to(device)
+
+    print("Tune optimizer...")
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
-    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
-    loss_fn_train = fnn.l1_loss
-    loss_fn_val = fnn.mse_loss # для валидации использую целевую метрику
+    loss_fn = fnn.mse_loss
 
     # 2. train & validate
     print("Ready for training...")
     best_val_loss = np.inf
+    time_counter = {'train': [], 'val': []}
+
     for epoch in range(args.epochs):
 
-        train_loss = train(model, train_dataloader, loss_fn_train, optimizer, device=device)
-        val_loss = validate(model, val_dataloader, loss_fn_val, device=device)
+        # train
+        start_time_train = datetime.now()
+        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device)
+        time_counter['train'].append((datetime.now() - start_time_train).seconds)
+
+        # val
+        start_time_val = datetime.now()
+        val_loss = validate(model, val_dataloader, loss_fn, device=device)
+        time_counter['val'].append((datetime.now() - start_time_val).seconds)
 
         print("Epoch #{:2}:\ttrain loss: {:5.2}\tval loss: {:5.2}".format(epoch, train_loss, val_loss))
         if val_loss < best_val_loss:
@@ -160,16 +157,22 @@ def main(args):
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
                                  shuffle=False, drop_last=False)
 
+    # load model
     with open(os.path.join(STORE_RESULTS_PATH, f"{args.name}_best.pth"), "rb") as fp:
-        best_state_dict = torch.load(fp, map_location="cpu")
+        best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
         model.load_state_dict(best_state_dict)
 
+    # save prediction
     test_predictions = predict(model, test_dataloader, device)
     with open(os.path.join(STORE_RESULTS_PATH, f"{args.name}_test_predictions.pkl"), "wb") as fp:
         pickle.dump({"image_names": test_dataset.image_names,
                      "landmarks": test_predictions}, fp)
 
-    create_submission(args.data, test_predictions, os.path.join(STORE_RESULTS_PATH, f"{args.name}_submit.csv"))
+    # save time
+    with open(os.path.join(STORE_RESULTS_PATH, f"{args.name}_time.txt"), 'w') as outfile:
+        json.dump(time_counter, outfile)
+
+    # create_submission(args.data, test_predictions, os.path.join(STORE_RESULTS_PATH, f"{args.name}_submit.csv"))
 
 
 # if __name__ == "__main__":
