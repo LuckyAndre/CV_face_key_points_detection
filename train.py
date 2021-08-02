@@ -102,14 +102,13 @@ def predict(model, loader, device):
 def main(args, train_transforms_experiment):
     
     # folder for artefacts
-    os.makedirs(os.path.join('runs', args.name))
+    os.makedirs(os.path.join('runs'))
 
     # 1. prepare data & models
     
-    train_transforms = train_transforms_experiment
-#     train_transforms = transforms.Compose([
-#         ScaleMinSideToSize((args.crop_size, args.crop_size)),
-#         CropCenter(args.crop_size),
+    train_transforms = transforms.Compose([
+        ScaleMinSideToSize((args.crop_size, args.crop_size)),
+        CropCenter(args.crop_size),
         
 #         # пиксельные трансформации
 #         TransformByKeysA(A.RandomBrightnessContrast(always_apply=False, p=0.2, brightness_limit=(-0.2, 0.2), contrast_limit=(-0.2, 0.2), brightness_by_max=True), ("image",)),
@@ -123,10 +122,10 @@ def main(args, train_transforms_experiment):
 #         # перекрытия
 #         TransformByKeysA(A.CoarseDropout(always_apply=False, p=0.3, max_holes=2, max_height=50, max_width=50, min_holes=1, min_height=50, min_width=50), ("image",)), 
         
-#         TransformByKeys(transforms.ToPILImage(), ("image",)),
-#         TransformByKeys(transforms.ToTensor(), ("image",)),
-#         TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
-#     ])    
+        TransformByKeys(transforms.ToPILImage(), ("image",)),
+        TransformByKeys(transforms.ToTensor(), ("image",)),
+        TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
+    ])    
     
     test_transforms = transforms.Compose([
         ScaleMinSideToSize((args.crop_size, args.crop_size)),
@@ -139,8 +138,8 @@ def main(args, train_transforms_experiment):
     print("Reading data...")
     train_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="train", data_size=args.data_size)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=True, drop_last=True)
-    val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), test_transforms, split="val", data_size=args.data_size)
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
+#     val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), test_transforms, split="val", data_size=args.data_size)
+#     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
     device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
 
     print("Creating model...")
