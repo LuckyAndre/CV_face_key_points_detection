@@ -10,11 +10,21 @@ from torch.utils import data
 np.random.seed(1234)
 torch.manual_seed(1234)
 
-TRAIN_SIZE = 0.8
+TRAIN_SHARE = 0.8
+DATA_SIZE = 64_000
 NUM_PTS = 971
 SUBMISSION_HEADER = "file_name,Point_M0_X,Point_M0_Y,Point_M1_X,Point_M1_Y,Point_M2_X,Point_M2_Y,Point_M3_X,Point_M3_Y,Point_M4_X,Point_M4_Y,Point_M5_X,Point_M5_Y,Point_M6_X,Point_M6_Y,Point_M7_X,Point_M7_Y,Point_M8_X,Point_M8_Y,Point_M9_X,Point_M9_Y,Point_M10_X,Point_M10_Y,Point_M11_X,Point_M11_Y,Point_M12_X,Point_M12_Y,Point_M13_X,Point_M13_Y,Point_M14_X,Point_M14_Y,Point_M15_X,Point_M15_Y,Point_M16_X,Point_M16_Y,Point_M17_X,Point_M17_Y,Point_M18_X,Point_M18_Y,Point_M19_X,Point_M19_Y,Point_M20_X,Point_M20_Y,Point_M21_X,Point_M21_Y,Point_M22_X,Point_M22_Y,Point_M23_X,Point_M23_Y,Point_M24_X,Point_M24_Y,Point_M25_X,Point_M25_Y,Point_M26_X,Point_M26_Y,Point_M27_X,Point_M27_Y,Point_M28_X,Point_M28_Y,Point_M29_X,Point_M29_Y\n"
 
 
+# после анализа обнаружилась, что есть фото с неправильно разметкой - список таких фото в bad_files_with_bias.txt, bad_files_with_high_dispersion.txt
+with open("data/bad_files_with_bias.txt") as f:
+    bad_files_bias = f.read().split("\n")
+
+with open("data/bad_files_with_high_dispersion.txt") as f:
+    bad_files_dispersion = f.read().split("\n")
+    
+
+# аугментация    
 class ScaleMinSideToSize(object):
     """
     Сжатие размеров изображения. Коэффициент сжатия определяется по меньшей стороне!
@@ -23,13 +33,13 @@ class ScaleMinSideToSize(object):
         self.size = np.asarray(size, dtype=np.float)
         self.elem_name = elem_name
 
-    # определяю коэффициент сжатия f
     def __call__(self, sample):
         """
         sample - это словарь:
         sample['image'] - это RGB матрица изображения
         sample['landmarks'] - матрица 971 x 2 с разметкой
         как создается sample - см. ThousandLandmarksDataset
+        f - коэффициент сжатия изображения
         """
         h, w, _ = sample[self.elem_name].shape
         if h < w:
@@ -49,7 +59,8 @@ class ScaleMinSideToSize(object):
 
         return sample
 
-
+    
+# аугментация 
 class CropCenter(object):
     def __init__(self, size, elem_name='image'):
         self.size = size
@@ -76,7 +87,8 @@ class CropCenter(object):
 
         return sample
 
-
+    
+# класс для применения torchvision.transforms.<transformation_name> в пайплайне
 class TransformByKeys(object):
     def __init__(self, transform, names):
         self.transform = transform
@@ -89,9 +101,22 @@ class TransformByKeys(object):
 
         return sample
 
+    
+# класс для применения albumentations.<transformation_name> в пайплайне
+class TransformByKeysA(object):
+    def __init__(self, transform, names):
+        self.transform = transform
+        self.names = set(names)
+
+    def __call__(self, sample):
+        for name in self.names:
+            if name in sample:
+                sample[name] = self.transform(image=sample[name])['image'] # необольшое отличие в интерфейсе!
+        return sample
+
 
 class ThousandLandmarksDataset(data.Dataset):
-    def __init__(self, root, transforms, split="train"):
+    def __init__(self, root, transforms, split="train", data_size=DATA_SIZE, train_share=TRAIN_SHARE):
         """
         Метод записывает атрибуты
         self.landmarks - список с разметкой для каждого файла [np.array(971, 2), ... np.array(971, 2)]
@@ -103,35 +128,39 @@ class ThousandLandmarksDataset(data.Dataset):
         self.root = root
         landmark_file_name = os.path.join(root, 'landmarks.csv') if split != "test" else os.path.join(root, "test_points.csv")
         images_folder_name = os.path.join(root, "images")
+        
+        # атрибуты для конечного результата
         self.image_names = []
         self.landmarks = []
 
-        # количество строк (примеров) в файле landmark_file_name
+        # считываем данные из landmark_file_name и ограничиваем кол-во, если передан параметр data_size
         with open(landmark_file_name, "rt") as fp:
-            num_lines = sum(1 for line in fp)
-        num_lines -= 1  # header
+            file_data = fp.read().split("\n")[1: -1] # skip header and last empty element
+        if data_size < len(file_data):
+            file_data = file_data[:data_size]
+            
+        # обработка разметки
+        for i, line in tqdm.tqdm(enumerate(file_data), total=len(file_data), desc="load landmarks..."):
 
-        # чтение разметки
-        with open(landmark_file_name, "rt") as fp:
-            for i, line in tqdm.tqdm(enumerate(fp), total=num_lines + 1):
+            # разделение строк на train, val
+            if split == "train" and i == int(train_share * len(file_data)):
+                break  # reached end of train part of data
+            elif split == "val" and i < int(train_share * len(file_data)):
+                continue  # has not reached start of val part of data
+            elements = line.strip().split("\t")
+            image_name = os.path.join(images_folder_name, elements[0]) # нулевой элемент - имя файла
+            
+            # исключаю файлы с плохой разметкой
+            if (image_name in bad_files_bias): # or (image_name in bad_files_dispersion):
+                continue # skip bad files
 
-                # разделение строк на train, val
-                if i == 0:
-                    continue  # skip header
-                if split == "train" and i == int(TRAIN_SIZE * num_lines):
-                    break  # reached end of train part of data
-                elif split == "val" and i < int(TRAIN_SIZE * num_lines):
-                    continue  # has not reached start of val part of data
-                elements = line.strip().split("\t")
-                image_name = os.path.join(images_folder_name, elements[0]) # нулевой элемент - имя файла
-                self.image_names.append(image_name)
-
-                # чтение разметки
-                if split in ("train", "val"):
-                    landmarks = list(map(np.int, elements[1:]))
-                    landmarks = np.array(landmarks, dtype=np.int).reshape((len(landmarks) // 2, 2))
-                    # для каждого файла landmarks - это матрица рамера 971 X 2
-                    self.landmarks.append(landmarks)
+            # сохраняю в image_names имена файлов, в landmarks разметку для соответствующего файла
+            self.image_names.append(image_name)
+            if split in ("train", "val"):
+                landmarks = list(map(np.int, elements[1:]))
+                landmarks = np.array(landmarks, dtype=np.int).reshape((len(landmarks) // 2, 2))
+                # для каждого файла landmarks - это матрица рамера 971 X 2
+                self.landmarks.append(landmarks)
 
         if split in ("train", "val"):
             self.landmarks = torch.as_tensor(self.landmarks)

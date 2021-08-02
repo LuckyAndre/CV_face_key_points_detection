@@ -12,11 +12,12 @@ from torch.nn import functional as fnn
 from torch.utils.data import DataLoader
 import torchvision.models as models
 from torchvision import transforms
+import albumentations as A
 import tqdm
 from ipdb import set_trace
 
 from utils import NUM_PTS
-from utils import ScaleMinSideToSize, CropCenter, TransformByKeys
+from utils import ScaleMinSideToSize, CropCenter, TransformByKeys, TransformByKeysA
 from utils import ThousandLandmarksDataset
 from utils import restore_landmarks_batch, create_submission
 
@@ -28,7 +29,8 @@ torch.backends.cudnn.deterministic = True
 def parse_arguments():
     parser = ArgumentParser(__doc__)
     parser.add_argument("--name", "-n", help="Experiment name (for saving checkpoints and submits).", default="baseline")
-    parser.add_argument("--data", "-d", help="Path to dir with target images & landmarks.", default=None)
+    parser.add_argument("--data-folder", "-d", help="Path to dir with target images & landmarks.", default=None)
+    parser.add_argument("--data-size", "-d", help="Path to dir with target images & landmarks.", default=None)
     parser.add_argument("--crop-size", "-c", default=224, type=int)
     parser.add_argument("--batch-size", "-b", default=64, type=int)
     parser.add_argument("--epochs", "-e", default=1, type=int)
@@ -42,7 +44,7 @@ def train(model, loader, loss_fn, optimizer, device): # loader возвраща�
     model.train()
     train_loss = []
 
-    for batch in tqdm.tqdm(loader, total=len(loader), desc="training..."):
+    for batch in tqdm.tqdm(loader, total=len(loader), desc="train..."):
         # данные
         images = batch["image"].to(device)  # B x 3 x CROP_SIZE x CROP_SIZE
         landmarks = batch["landmarks"]  # B x 1942
@@ -80,7 +82,7 @@ def predict(model, loader, device):
     model.eval()
     predictions = np.zeros((len(loader.dataset), NUM_PTS, 2))
 
-    for i, batch in enumerate(tqdm.tqdm(loader, total=len(loader), desc="test prediction...")):
+    for i, batch in enumerate(tqdm.tqdm(loader, total=len(loader), desc="prediction...")):
         images = batch["image"].to(device)
 
         with torch.no_grad():
@@ -97,10 +99,36 @@ def predict(model, loader, device):
     return predictions
 
 
-def main(args):
+def main(args, train_transforms_experiment):
+    
+    # folder for artefacts
+    os.makedirs(os.path.join('runs', args.name))
 
     # 1. prepare data & models
-    train_transforms = transforms.Compose([
+    
+    train_transforms = train_transforms_experiment
+#     train_transforms = transforms.Compose([
+#         ScaleMinSideToSize((args.crop_size, args.crop_size)),
+#         CropCenter(args.crop_size),
+        
+#         # пиксельные трансформации
+#         TransformByKeysA(A.RandomBrightnessContrast(always_apply=False, p=0.2, brightness_limit=(-0.2, 0.2), contrast_limit=(-0.2, 0.2), brightness_by_max=True), ("image",)),
+#         TransformByKeysA(A.RandomGamma(always_apply=False, p=0.2, gamma_limit=(30, 140), eps=1e-07), ("image",)),
+#         TransformByKeysA(A.ToGray(always_apply=False, p=0.1), ("image",)),
+
+#         # шумы
+#         TransformByKeysA(A.Blur(always_apply=False, p=0.2, blur_limit=(3, 7)), ("image",)),
+#         TransformByKeysA(A.GaussNoise(always_apply=False, p=0.2, var_limit=(10.0, 50.0)), ("image",)),
+
+#         # перекрытия
+#         TransformByKeysA(A.CoarseDropout(always_apply=False, p=0.3, max_holes=2, max_height=50, max_width=50, min_holes=1, min_height=50, min_width=50), ("image",)), 
+        
+#         TransformByKeys(transforms.ToPILImage(), ("image",)),
+#         TransformByKeys(transforms.ToTensor(), ("image",)),
+#         TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
+#     ])    
+    
+    test_transforms = transforms.Compose([
         ScaleMinSideToSize((args.crop_size, args.crop_size)),
         CropCenter(args.crop_size),
         TransformByKeys(transforms.ToPILImage(), ("image",)),
@@ -109,9 +137,9 @@ def main(args):
     ])
 
     print("Reading data...")
-    train_dataset = ThousandLandmarksDataset(os.path.join(args.data, "train_short"), train_transforms, split="train")
+    train_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="train", data_size=args.data_size)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=True, drop_last=True)
-    val_dataset = ThousandLandmarksDataset(os.path.join(args.data, "train_short"), train_transforms, split="val")
+    val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), test_transforms, split="val", data_size=args.data_size)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
     device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
 
@@ -122,6 +150,7 @@ def main(args):
     model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
     model.fc.requires_grad_(True)
     model.to(device)
+    
 
     print("Tune optimizer...")
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
@@ -130,47 +159,63 @@ def main(args):
     # 2. train & validate
     print("Ready for training...")
     best_val_loss = np.inf
-    time_counter = {'train': [], 'val': []}
+    metrics = {'train_time': [], 'val_time': [], 'train_loss': [], 'val_loss': []}
 
     for epoch in range(args.epochs):
 
         # train
         start_time_train = datetime.now()
         train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device)
-        time_counter['train'].append((datetime.now() - start_time_train).seconds)
+        metrics['train_time'].append((datetime.now() - start_time_train).seconds)
+        metrics['train_loss'].append(round(train_loss, 1))
 
         # val
         start_time_val = datetime.now()
         val_loss = validate(model, val_dataloader, loss_fn, device=device)
-        time_counter['val'].append((datetime.now() - start_time_val).seconds)
+        metrics['val_time'].append((datetime.now() - start_time_val).seconds)
+        metrics['val_loss'].append(round(val_loss, 1))
 
         print("Epoch #{:2}:\ttrain loss: {:5.2}\tval loss: {:5.2}".format(epoch, train_loss, val_loss))
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            with open(os.path.join(args.data, 'runs', f"{args.name}_best.pth"), "wb") as fp:
+            with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "wb") as fp:
                 torch.save(model.state_dict(), fp)
 
     # 3. predict
-    test_dataset = ThousandLandmarksDataset(os.path.join(args.data, "test"), train_transforms, split="test")
+    test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), test_transforms, split="test")
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
                                  shuffle=False, drop_last=False)
 
     # load model
-    with open(os.path.join(args.data, 'runs', f"{args.name}_best.pth"), "rb") as fp:
+    with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "rb") as fp:
         best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
         model.load_state_dict(best_state_dict)
 
     # save prediction
     test_predictions = predict(model, test_dataloader, device)
-    with open(os.path.join(args.data, 'runs', f"{args.name}_test_predictions.pkl"), "wb") as fp:
+    with open(os.path.join('runs', args.name, f"test_predictions_{args.name}.pkl"), "wb") as fp:
         pickle.dump({"image_names": test_dataset.image_names,
                      "landmarks": test_predictions}, fp)
 
-    # save time
-    with open(os.path.join(args.data, 'runs', f"{args.name}_time.txt"), 'w') as outfile:
-        json.dump(time_counter, outfile)
+    # save metrics
+    with open(os.path.join('runs', args.name, f"metrics_{args.name}.txt"), 'w') as outfile:
+        json.dump(metrics, outfile)
+        
+    # save start params
+    with open(os.path.join('runs', args.name, f"start_params_{args.name}.txt"), 'w') as outfile: 
+        json.dump(vars(args), outfile)
 
-    # create_submission(args.data, test_predictions, os.path.join(args.data, 'runs', f"{args.name}_submit.csv"))
+    print('Create submission...')
+    create_submission(args.data_folder, test_predictions, os.path.join('runs', args.name, f"submit_{args.name}.csv"))
+    
+#     #### check answer in train data
+#     print('Check answer in train data...')
+#     train_dataset2 = ThousandLandmarksDataset(os.path.join(args.data_folder, 'train'), train_transforms, split="train", train_size=1)
+#     train_dataloader2 = DataLoader(train_dataset2, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
+#     train_predictions2 = predict(model, train_dataloader2, device)
+#     with open(os.path.join('runs', args.name, f"train_predictions_{args.name}.pkl"), "wb") as fp:
+#         pickle.dump({"image_names": train_dataset2.image_names, "landmarks": train_predictions2}, fp)
+#     ####
 
 
 # if __name__ == "__main__":
