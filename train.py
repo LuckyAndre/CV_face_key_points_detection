@@ -101,14 +101,13 @@ def predict(model, loader, device):
 
 
 
-def main(args, train_transforms_experiment):
+def main(args):
     
     # folder for artefacts
     os.makedirs(os.path.join('runs', args.name))
 
     # 1. prepare data & models
     
-    train_transforms = train_transforms_experiment
 #     train_transforms = transforms.Compose([
 #         ScaleMinSideToSize((args.crop_size, args.crop_size)),
 #         CropCenter(args.crop_size),
@@ -130,7 +129,8 @@ def main(args, train_transforms_experiment):
 #         TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
 #     ])    
     
-    test_transforms = transforms.Compose([
+    print('Только train_transforms')
+    train_transforms = transforms.Compose([
         ScaleMinSideToSize((args.crop_size, args.crop_size)),
         CropCenter(args.crop_size),
         TransformByKeys(transforms.ToPILImage(), ("image",)),
@@ -141,8 +141,8 @@ def main(args, train_transforms_experiment):
     print("Reading data...")
     train_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="train", data_size=args.data_size)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=True, drop_last=True)
-    val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), test_transforms, split="val", data_size=args.data_size)
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
+#     val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="val", data_size=args.data_size)
+#     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
     device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
 
     print("Creating model...")
@@ -171,20 +171,24 @@ def main(args, train_transforms_experiment):
         metrics['train_time'].append((datetime.now() - start_time_train).seconds)
         metrics['train_loss'].append(round(train_loss, 1))
 
-        # val
-        start_time_val = datetime.now()
-        val_loss = validate(model, val_dataloader, loss_fn, device=device)
-        metrics['val_time'].append((datetime.now() - start_time_val).seconds)
-        metrics['val_loss'].append(round(val_loss, 1))
+#         # val
+#         start_time_val = datetime.now()
+#         val_loss = validate(model, val_dataloader, loss_fn, device=device)
+#         metrics['val_time'].append((datetime.now() - start_time_val).seconds)
+#         metrics['val_loss'].append(round(val_loss, 1))
 
-        print("Epoch #{:2}:\ttrain loss: {:5.2}\tval loss: {:5.2}".format(epoch, train_loss, val_loss))
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "wb") as fp:
-                torch.save(model.state_dict(), fp)
+#         print("Epoch #{:2}:\ttrain loss: {:5.2}\tval loss: {:5.2}".format(epoch, train_loss, val_loss))
+#         if val_loss < best_val_loss:
+#             best_val_loss = val_loss
+#             with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "wb") as fp:
+#                 torch.save(model.state_dict(), fp)
+
+        with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "wb") as fp:
+            torch.save(model.state_dict(), fp)
+        
 
     # 3. predict
-    test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), test_transforms, split="test")
+    test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), train_transforms, split="test")
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
                                  shuffle=False, drop_last=False)
 
