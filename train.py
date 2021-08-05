@@ -57,7 +57,7 @@ def train(model, loader, loss_fn, optimizer, device): # loader возвраща�
         # градиентный спуск
         optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        #optimizer.step()
 
     return np.mean(train_loss)
 
@@ -99,7 +99,7 @@ def predict(model, loader, device):
     return predictions
 
 
-def main(args, train_transforms_experiment):
+def main(args):
     
     # folder for artefacts
     os.makedirs(os.path.join('runs', args.name))
@@ -131,6 +131,7 @@ def main(args, train_transforms_experiment):
 
     print("Tune optimizer...")
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+    scheduler = ReduceLROnPlateau(optimizer, 'min')
     loss_fn = fnn.mse_loss
 
     # 2. train & validate
@@ -157,6 +158,10 @@ def main(args, train_transforms_experiment):
             best_val_loss = val_loss
             with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "wb") as fp:
                 torch.save(model.state_dict(), fp)
+                
+                
+        print('scheduler step!')
+        scheduler.step(val_loss)
 
     # 3. predict
     test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), train_transforms, split="test")
