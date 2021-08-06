@@ -107,6 +107,7 @@ def main(args, train_transforms):
     os.makedirs(os.path.join('runs', args.name))
 
     # 1. prepare data & models
+    print("Reading data...")
     test_transforms = transforms.Compose([
         ScaleMinSideToSize((args.crop_size, args.crop_size)),
         CropCenter(args.crop_size),
@@ -115,7 +116,6 @@ def main(args, train_transforms):
         TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
     ])
 
-    print("Reading data...")
     train_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="train", data_size=args.data_size)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=True, drop_last=True)
     val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), test_transforms, split="val", data_size=args.data_size)
@@ -163,8 +163,7 @@ def main(args, train_transforms):
 
     # 3. predict
     test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), test_transforms, split="test")
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
-                                 shuffle=False, drop_last=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
 
     # load model
     with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "rb") as fp:
@@ -177,6 +176,10 @@ def main(args, train_transforms):
         pickle.dump({"image_names": test_dataset.image_names,
                      "landmarks": test_predictions}, fp)
 
+    # save submit
+    print('Create submission...')
+    create_submission(args.data_folder, test_predictions, os.path.join('runs', args.name, f"submit_{args.name}.csv"))
+    
     # save metrics
     with open(os.path.join('runs', args.name, f"metrics_{args.name}.txt"), 'w') as outfile:
         json.dump(metrics, outfile)
@@ -184,9 +187,6 @@ def main(args, train_transforms):
     # save start params
     with open(os.path.join('runs', args.name, f"start_params_{args.name}.txt"), 'w') as outfile: 
         json.dump(vars(args), outfile)
-
-    print('Create submission...')
-    create_submission(args.data_folder, test_predictions, os.path.join('runs', args.name, f"submit_{args.name}.csv"))
 
 
 # if __name__ == "__main__":
