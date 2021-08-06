@@ -40,11 +40,11 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def train(model, loader, loss_fn, optimizer, device): # loader возвращает набор всех батчей из датасета
+def train(model, loader, loss_fn, optimizer, device, scheduler, epoch): # loader возвращает набор всех батчей из датасета
     model.train()
     train_loss = []
-
-    for batch in tqdm.tqdm(loader, total=len(loader), desc="train..."):
+    
+    for i, batch in tqdm.tqdm(enumerate(loader), total=len(loader), desc="train..."):
         # данные
         images = batch["image"].to(device)  # B x 3 x CROP_SIZE x CROP_SIZE
         landmarks = batch["landmarks"]  # B x 1942
@@ -58,6 +58,7 @@ def train(model, loader, loss_fn, optimizer, device): # loader возвраща�
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        scheduler.step(epoch + i / len(loader))
 
     return np.mean(train_loss)
 
@@ -130,8 +131,11 @@ def main(args):
     
 
     print("Tune optimizer...")
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
-    #scheduler = ReduceLROnPlateau(optimizer, 'min')
+    #optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+    optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3)
+    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=1, eta_min=0, last_epoch=-1)
     loss_fn = fnn.mse_loss
 
     # 2. train & validate
@@ -143,7 +147,7 @@ def main(args):
 
         # train
         start_time_train = datetime.now()
-        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device)
+        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device, scheduler=scheduler, epoch=epoch)
         metrics['train_time'].append((datetime.now() - start_time_train).seconds)
         metrics['train_loss'].append(round(train_loss, 1))
 
@@ -157,10 +161,9 @@ def main(args):
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "wb") as fp:
-                torch.save(model.state_dict(), fp) 
+                torch.save(model.state_dict(), fp)  
+        # scheduler.step(val_loss) # for ReduceLROnPlateau scheduler
                 
-#         print('scheduler step!')
-#         scheduler.step(val_loss)
 
     # 3. predict
     test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), train_transforms, split="test")
