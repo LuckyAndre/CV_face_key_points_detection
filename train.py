@@ -59,8 +59,8 @@ def train(model, loader, loss_fn, optimizer, device, scheduler, epoch): # loader
         loss.backward()
         optimizer.step()
         
-        #scheduler.step() # CyclicLR
-        scheduler.step(epoch + i / len(loader)) # CosineAnnealingWarmRestarts
+        scheduler.step() # CyclicLR
+        #scheduler.step(epoch + i / len(loader)) # CosineAnnealingWarmRestarts
 
     return np.mean(train_loss)
 
@@ -136,8 +136,8 @@ def main(args, loss_fn):
     #optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
     optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
     #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3)
-    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
-    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=1, eta_min=0, last_epoch=-1)
+    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
+    #scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=1, eta_min=0, last_epoch=-1)
 
     # 2. train & validate
     print(f"Ready for training with model=resnext50_32x4d, loss={loss_fn.__name__}, scheduler=CosineAnnealingWarmRestarts ...")
