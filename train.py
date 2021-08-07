@@ -140,7 +140,7 @@ def main(args, loss_fn):
     #scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=1, eta_min=0, last_epoch=-1)
 
     # 2. train & validate
-    print(f"Ready for training with model=resnext50_32x4d, loss={loss_fn.__name__}, scheduler=CosineAnnealingWarmRestarts ...")
+    print(f"Ready for training with model=resnext50_32x4d, loss={loss_fn.__name__}, scheduler=CyclicLR, data_size={args.data_size} ...")
     best_val_loss = np.inf
     metrics = {'train_time': [], 'val_time': [], 'train_loss': [], 'val_loss': []}
 
@@ -193,6 +193,17 @@ def main(args, loss_fn):
     # save start params
     with open(os.path.join('runs', args.name, f"start_params_{args.name}.txt"), 'w') as outfile: 
         json.dump(vars(args), outfile)
+        
+        
+    #### check answer in train data
+    print('Check answer in train data...')
+    train_dataset2 = ThousandLandmarksDataset(os.path.join(args.data_folder, 'train'), train_transforms, split="train", train_size=1)
+    
+    train_dataloader2 = DataLoader(train_dataset2, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
+    train_predictions2 = predict(model, train_dataloader2, device)
+    with open(os.path.join('runs', args.name, f"train_predictions_{args.name}.pkl"), "wb") as fp:
+        pickle.dump({"image_names": train_dataset2.image_names, "landmarks": train_predictions2}, fp)
+    ####
 
 
 
