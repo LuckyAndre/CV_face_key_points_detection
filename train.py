@@ -58,7 +58,9 @@ def train(model, loader, loss_fn, optimizer, device, scheduler, epoch): # loader
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        scheduler.step(epoch + i / len(loader))
+        
+        #scheduler.step() # CyclicLR
+        scheduler.step(epoch + i / len(loader)) # CosineAnnealingWarmRestarts
 
     return np.mean(train_loss)
 
@@ -100,7 +102,7 @@ def predict(model, loader, device):
     return predictions
 
 
-def main(args):
+def main(args, loss_fn):
     
     # folder for artefacts
     os.makedirs(os.path.join('runs', args.name))
@@ -122,7 +124,7 @@ def main(args):
     device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
 
     print("Creating model...")
-    model = models.resnet18(pretrained=True)
+    model = models.resnext50_32x4d(pretrained=True)
     model.requires_grad_(True)
     # Меняем слой fc предобученной модели на новый fc слой, который переобучим под нашу задачу
     model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
@@ -136,10 +138,9 @@ def main(args):
     #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3)
     #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=1, eta_min=0, last_epoch=-1)
-    loss_fn = fnn.mse_loss
 
     # 2. train & validate
-    print("Ready for training...")
+    print(f"Ready for training with model=resnext50_32x4d, loss={loss_fn.__name__}, scheduler=CosineAnnealingWarmRestarts ...")
     best_val_loss = np.inf
     metrics = {'train_time': [], 'val_time': [], 'train_loss': [], 'val_loss': []}
 
@@ -153,7 +154,7 @@ def main(args):
 
         # val
         start_time_val = datetime.now()
-        val_loss = validate(model, val_dataloader, loss_fn, device=device)
+        val_loss = validate(model, val_dataloader, fnn.mse_loss, device=device) # валидируюсь всегда на целевой функции mse
         metrics['val_time'].append((datetime.now() - start_time_val).seconds)
         metrics['val_loss'].append(round(val_loss, 1))
 
