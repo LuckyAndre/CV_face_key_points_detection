@@ -40,7 +40,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def train(model, loader, loss_fn, optimizer, device, scheduler, epoch): # loader возвращает набор всех батчей из датасета
+def train(model, loader, loss_fn, optimizer, device): # loader возвращает набор всех батчей из датасета
     model.train()
     train_loss = []
     
@@ -58,7 +58,6 @@ def train(model, loader, loss_fn, optimizer, device, scheduler, epoch): # loader
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        scheduler.step(epoch + i / len(loader))
 
     return np.mean(train_loss)
 
@@ -100,7 +99,7 @@ def predict(model, loader, device):
     return predictions
 
 
-def main(args):
+def main(args, loss_fn):
     
     # folder for artefacts
     os.makedirs(os.path.join('runs', args.name))
@@ -131,12 +130,9 @@ def main(args):
     
 
     print("Tune optimizer...")
-    #optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
-    optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
-    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3)
-    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
-    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1, T_mult=1, eta_min=0, last_epoch=-1)
-    loss_fn = fnn.mse_loss
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+    #loss_fn = fnn.mse_loss
+    print(f'Use {loss_fn.__name__}!')
 
     # 2. train & validate
     print("Ready for training...")
@@ -147,13 +143,13 @@ def main(args):
 
         # train
         start_time_train = datetime.now()
-        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device, scheduler=scheduler, epoch=epoch)
+        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device)
         metrics['train_time'].append((datetime.now() - start_time_train).seconds)
         metrics['train_loss'].append(round(train_loss, 1))
 
         # val
         start_time_val = datetime.now()
-        val_loss = validate(model, val_dataloader, loss_fn, device=device)
+        val_loss = validate(model, val_dataloader, fnn.mse_loss, device=device) # на валидации всегда использую L2 loss, поскольку это целевая метрика!
         metrics['val_time'].append((datetime.now() - start_time_val).seconds)
         metrics['val_loss'].append(round(val_loss, 1))
 
@@ -161,8 +157,7 @@ def main(args):
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "wb") as fp:
-                torch.save(model.state_dict(), fp)  
-        # scheduler.step(val_loss) # for ReduceLROnPlateau scheduler
+                torch.save(model.state_dict(), fp) 
                 
 
     # 3. predict
