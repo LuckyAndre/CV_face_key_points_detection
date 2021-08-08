@@ -22,8 +22,5 @@ env*/
 
 # My folders, files
 data/
-*.pth
-*.csv
-*.pkl
-
+runs/
 temp/
