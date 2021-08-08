@@ -1,0 +1,1 @@
+{"name": "resnet18_64000_Unfreez_10epoch", "data_folder": "data", "data_size": 64000, "crop_size": 256, "batch_size": 64, "epochs": 10, "learning_rate": 0.001, "gpu": true, "worker": 1}

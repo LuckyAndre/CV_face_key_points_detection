@@ -1,0 +1,1 @@
+{"train_time": [475], "val_time": [], "train_loss": [1353.3], "val_loss": []}

@@ -20,8 +20,10 @@ env*/
 .ipynb_checkpoints
 
 
-# My temp folders, files
-data.zip
+# My folders, files
 data/
+*.pth
+*.csv
+*.pkl
+
 temp/
-runs/

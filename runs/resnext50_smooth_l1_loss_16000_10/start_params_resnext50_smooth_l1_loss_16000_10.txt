@@ -1,0 +1,1 @@
+{"name": "resnext50_smooth_l1_loss_16000_10", "data_folder": "data", "data_size": 16000, "crop_size": 256, "batch_size": 64, "epochs": 10, "learning_rate": 0.001, "gpu": true, "worker": 1}

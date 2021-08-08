@@ -1,0 +1,1 @@
+{"name": "Blur", "data_folder": "data", "data_size": 16000, "crop_size": 256, "batch_size": 64, "epochs": 5, "learning_rate": 0.001, "gpu": true, "worker": 1}
