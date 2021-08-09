@@ -53,7 +53,7 @@ def wing_loss(x_pred: torch.Tensor, x_true: torch.Tensor, w: float, e: float, re
     return torch.mean(result)
 
 
-def train(model, loader, loss_fn_w, loss_fn_e, optimizer, device): # loader возвращает набор всех батчей из датасета
+def train(model, loader, loss_fn_w, loss_fn_e, optimizer, device, scheduler): # loader возвращает набор всех батчей из датасета
     model.train()
     train_loss = []
     
@@ -71,6 +71,7 @@ def train(model, loader, loss_fn_w, loss_fn_e, optimizer, device): # loader во
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        scheduler.step()
 
     return np.mean(train_loss)
 
@@ -143,7 +144,9 @@ def main(args, loss_fn_w, loss_fn_e):
     
 
     print("Tune optimizer...")
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+    #optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+    optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
     #loss_fn = fnn.mse_loss
     print(f'Use wing loss!')
 
@@ -156,7 +159,7 @@ def main(args, loss_fn_w, loss_fn_e):
 
         # train
         start_time_train = datetime.now()
-        train_loss = train(model, train_dataloader, loss_fn_w, loss_fn_e, optimizer, device=device)
+        train_loss = train(model, train_dataloader, loss_fn_w, loss_fn_e, optimizer, device=device, scheduler)
         metrics['train_time'].append((datetime.now() - start_time_train).seconds)
         metrics['train_loss'].append(round(train_loss, 1))
 
