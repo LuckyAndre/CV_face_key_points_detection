@@ -3,6 +3,7 @@ import pickle
 from argparse import ArgumentParser
 from datetime import datetime
 import json
+import math
 
 import numpy as np
 import torch
@@ -40,7 +41,19 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def train(model, loader, loss_fn, optimizer, device): # loader возвращает набор всех батчей из датасета
+def wing_loss(x_pred: torch.Tensor, x_true: torch.Tensor, w: float, e: float, reduction='mean'):
+    
+    x = x_pred - x_true # error 
+    c = w - w * math.log(1 + w / e) # constant
+    selector = torch.abs(x) < w # condition
+    condition_true = w * torch.log(1 + torch.abs(x) / e)
+    condition_false = torch.abs(x) - c
+    result = torch.where(selector, condition_true, condition_false)   
+    
+    return torch.mean(result)
+
+
+def train(model, loader, loss_fn_w, loss_fn_e, optimizer, device): # loader возвращает набор всех батчей из датасета
     model.train()
     train_loss = []
     
@@ -51,7 +64,7 @@ def train(model, loader, loss_fn, optimizer, device): # loader возвраща�
 
         # прогноз и качество
         pred_landmarks = model(images).cpu()  # B x 1942 # TODO почему на CPU?
-        loss = loss_fn(pred_landmarks, landmarks, reduction="mean")
+        loss = wing_loss(pred_landmarks, landmarks, loss_fn_w, loss_fn_e, reduction="mean")
         train_loss.append(loss.item())
 
         # градиентный спуск
@@ -99,7 +112,7 @@ def predict(model, loader, device):
     return predictions
 
 
-def main(args, loss_fn):
+def main(args, loss_fn_w, loss_fn_e):
     
     # folder for artefacts
     os.makedirs(os.path.join('runs', args.name))
@@ -120,8 +133,8 @@ def main(args, loss_fn):
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
     device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
 
-    print("Creating model...")
-    model = models.resnet18(pretrained=True)
+    print("Creating model resnext50_32x4d...")
+    model = models.resnext50_32x4d(pretrained=True)
     model.requires_grad_(True)
     # Меняем слой fc предобученной модели на новый fc слой, который переобучим под нашу задачу
     model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
@@ -132,7 +145,7 @@ def main(args, loss_fn):
     print("Tune optimizer...")
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
     #loss_fn = fnn.mse_loss
-    print(f'Use {loss_fn.__name__}!')
+    print(f'Use wing loss!')
 
     # 2. train & validate
     print("Ready for training...")
@@ -143,7 +156,7 @@ def main(args, loss_fn):
 
         # train
         start_time_train = datetime.now()
-        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device)
+        train_loss = train(model, train_dataloader, loss_fn_w, loss_fn_e, optimizer, device=device)
         metrics['train_time'].append((datetime.now() - start_time_train).seconds)
         metrics['train_loss'].append(round(train_loss, 1))
 
@@ -160,25 +173,25 @@ def main(args, loss_fn):
                 torch.save(model.state_dict(), fp) 
                 
 
-    # 3. predict
-    test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), train_transforms, split="test")
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
-                                 shuffle=False, drop_last=False)
+#     # 3. predict
+#     test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), train_transforms, split="test")
+#     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
+#                                  shuffle=False, drop_last=False)
 
-    # load model
-    with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "rb") as fp:
-        best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
-        model.load_state_dict(best_state_dict)
+#     # load model
+#     with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "rb") as fp:
+#         best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
+#         model.load_state_dict(best_state_dict)
 
-    # save prediction
-    test_predictions = predict(model, test_dataloader, device)
-    with open(os.path.join('runs', args.name, f"test_predictions_{args.name}.pkl"), "wb") as fp:
-        pickle.dump({"image_names": test_dataset.image_names,
-                     "landmarks": test_predictions}, fp)
+#     # save prediction
+#     test_predictions = predict(model, test_dataloader, device)
+#     with open(os.path.join('runs', args.name, f"test_predictions_{args.name}.pkl"), "wb") as fp:
+#         pickle.dump({"image_names": test_dataset.image_names,
+#                      "landmarks": test_predictions}, fp)
     
-    # save submission
-    print('Create submission...')
-    create_submission(args.data_folder, test_predictions, os.path.join('runs', args.name, f"submit_{args.name}.csv"))
+#     # save submission
+#     print('Create submission...')
+#     create_submission(args.data_folder, test_predictions, os.path.join('runs', args.name, f"submit_{args.name}.csv"))
 
     # save metrics
     with open(os.path.join('runs', args.name, f"metrics_{args.name}.txt"), 'w') as outfile:
