@@ -159,7 +159,7 @@ def main(args, loss_fn_w, loss_fn_e):
 
         # train
         start_time_train = datetime.now()
-        train_loss = train(model, train_dataloader, loss_fn_w, loss_fn_e, optimizer, device=device, scheduler)
+        train_loss = train(model, train_dataloader, loss_fn_w, loss_fn_e, optimizer, device=device, scheduler=scheduler)
         metrics['train_time'].append((datetime.now() - start_time_train).seconds)
         metrics['train_loss'].append(round(train_loss, 1))
 
@@ -176,25 +176,25 @@ def main(args, loss_fn_w, loss_fn_e):
                 torch.save(model.state_dict(), fp) 
                 
 
-#     # 3. predict
-#     test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), train_transforms, split="test")
-#     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
-#                                  shuffle=False, drop_last=False)
+    # 3. predict
+    test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), train_transforms, split="test")
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
+                                 shuffle=False, drop_last=False)
 
-#     # load model
-#     with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "rb") as fp:
-#         best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
-#         model.load_state_dict(best_state_dict)
+    # load model
+    with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "rb") as fp:
+        best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
+        model.load_state_dict(best_state_dict)
 
-#     # save prediction
-#     test_predictions = predict(model, test_dataloader, device)
-#     with open(os.path.join('runs', args.name, f"test_predictions_{args.name}.pkl"), "wb") as fp:
-#         pickle.dump({"image_names": test_dataset.image_names,
-#                      "landmarks": test_predictions}, fp)
+    # save prediction
+    test_predictions = predict(model, test_dataloader, device)
+    with open(os.path.join('runs', args.name, f"test_predictions_{args.name}.pkl"), "wb") as fp:
+        pickle.dump({"image_names": test_dataset.image_names,
+                     "landmarks": test_predictions}, fp)
     
-#     # save submission
-#     print('Create submission...')
-#     create_submission(args.data_folder, test_predictions, os.path.join('runs', args.name, f"submit_{args.name}.csv"))
+    # save submission
+    print('Create submission...')
+    create_submission(args.data_folder, test_predictions, os.path.join('runs', args.name, f"submit_{args.name}.csv"))
 
     # save metrics
     with open(os.path.join('runs', args.name, f"metrics_{args.name}.txt"), 'w') as outfile:
