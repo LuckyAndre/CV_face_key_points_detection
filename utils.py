@@ -138,7 +138,9 @@ class ThousandLandmarksDataset(data.Dataset):
             file_data = fp.read().split("\n")[1: -1] # skip header and last empty element
         if data_size < len(file_data):
             file_data = file_data[:data_size]
-            
+        
+        
+        print('Super clean data!')
         # обработка разметки
         for i, line in tqdm.tqdm(enumerate(file_data), total=len(file_data), desc="load landmarks..."):
 
@@ -151,7 +153,7 @@ class ThousandLandmarksDataset(data.Dataset):
             image_name = os.path.join(images_folder_name, elements[0]) # нулевой элемент - имя файла
             
             # исключаю файлы с плохой разметкой
-            if (image_name in bad_files_bias): # or (image_name in bad_files_dispersion):
+            if (image_name in bad_files_bias) or (image_name in bad_files_dispersion):
                 continue # skip bad files
 
             # сохраняю в image_names имена файлов, в landmarks разметку для соответствующего файла

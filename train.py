@@ -53,7 +53,7 @@ def wing_loss(x_pred: torch.Tensor, x_true: torch.Tensor, w: float, e: float, re
     return torch.mean(result)
 
 
-def train(model, loader, loss_fn_w, loss_fn_e, optimizer, device, scheduler): # loader возвращает набор всех батчей из датасета
+def train(model, loader, loss_fn, optimizer, device, scheduler): # loader возвращает набор всех батчей из датасета
     model.train()
     train_loss = []
     
@@ -64,7 +64,8 @@ def train(model, loader, loss_fn_w, loss_fn_e, optimizer, device, scheduler): # 
 
         # прогноз и качество
         pred_landmarks = model(images).cpu()  # B x 1942 # TODO почему на CPU?
-        loss = wing_loss(pred_landmarks, landmarks, loss_fn_w, loss_fn_e, reduction="mean")
+        loss = loss_fn(pred_landmarks, landmarks, reduction="mean")
+        #loss = wing_loss(pred_landmarks, landmarks, loss_fn_w, loss_fn_e, reduction="mean")
         train_loss.append(loss.item())
 
         # градиентный спуск
@@ -113,7 +114,7 @@ def predict(model, loader, device):
     return predictions
 
 
-def main(args, loss_fn_w, loss_fn_e):
+def main(args, loss_fn):
     
     # folder for artefacts
     os.makedirs(os.path.join('runs', args.name))
@@ -148,7 +149,7 @@ def main(args, loss_fn_w, loss_fn_e):
     optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
     scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
     #loss_fn = fnn.mse_loss
-    print(f'Use wing loss!')
+    print(f'Use l1 loss!')
 
     # 2. train & validate
     print("Ready for training...")
@@ -159,7 +160,7 @@ def main(args, loss_fn_w, loss_fn_e):
 
         # train
         start_time_train = datetime.now()
-        train_loss = train(model, train_dataloader, loss_fn_w, loss_fn_e, optimizer, device=device, scheduler=scheduler)
+        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device, scheduler=scheduler)
         metrics['train_time'].append((datetime.now() - start_time_train).seconds)
         metrics['train_loss'].append(round(train_loss, 1))
 
