@@ -31,7 +31,8 @@ def parse_arguments():
     parser = ArgumentParser(__doc__)
     parser.add_argument("--name", "-n", help="Experiment name (for saving checkpoints and submits).", default="baseline")
     parser.add_argument("--data-folder", "-d", help="Path to dir with target images & landmarks.", default=None)
-    parser.add_argument("--data-size", "-d", help="Path to dir with target images & landmarks.", default=None)
+    parser.add_argument("--data-size", "-d", help="Size of train data set.", default=None)
+    parser.add_argument("--train-share", "-d", help="Share of train data set.", default=None)
     parser.add_argument("--crop-size", "-c", default=224, type=int)
     parser.add_argument("--batch-size", "-b", default=64, type=int)
     parser.add_argument("--epochs", "-e", default=1, type=int)
@@ -127,10 +128,10 @@ def main(args, loss_fn_w, loss_fn_e):
         TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
     ])
 
-    print("Reading data...")
-    train_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="train", data_size=args.data_size)
+    print(f"Reading data (train_size={int(args.data_size * args.train_share)}, val_size={int(args.data_size * (1- args.train_share))}...")
+    train_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="train", data_size=args.data_size, train_share=args.train_share)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=True, drop_last=True)
-    val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="val", data_size=args.data_size)
+    val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="val", data_size=args.data_size, train_share=args.train_share)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
     device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
 
@@ -143,12 +144,11 @@ def main(args, loss_fn_w, loss_fn_e):
     model.to(device)
     
 
-    print("Tune optimizer...")
+    print("Tune optimizer wing_loss + SGD + CyclicLR...")
     #optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
     optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
     scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
     #loss_fn = fnn.mse_loss
-    print(f'Use wing loss!')
 
     # 2. train & validate
     print("Ready for training...")
@@ -159,7 +159,7 @@ def main(args, loss_fn_w, loss_fn_e):
 
         # train
         start_time_train = datetime.now()
-        train_loss = train(model, train_dataloader, loss_fn_w, loss_fn_e, optimizer, device=device, scheduler=scheduler)
+        train_loss = train(model, train_dataloader, loss_fn_w, loss_fn_e, optimizer, device=device, scheduler=scheduler) # на трэйне использую wing_loss!
         metrics['train_time'].append((datetime.now() - start_time_train).seconds)
         metrics['train_loss'].append(round(train_loss, 1))
 
