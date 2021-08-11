@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 import math
 
+import timm
 import numpy as np
 import torch
 import torch.nn as nn
@@ -29,9 +30,9 @@ torch.backends.cudnn.deterministic = True
 
 def parse_arguments():
     parser = ArgumentParser(__doc__)
-    parser.add_argument("--name", "-n", help="Experiment name (for saving checkpoints and submits).", default="baseline")
+    parser.add_argument("--name", "-n", help="Experiment name (for saving checkpoints and submits).", default=None)
     parser.add_argument("--data-folder", "-d", help="Path to dir with target images & landmarks.", default=None)
-    parser.add_argument("--data-size", "-d", help="Path to dir with target images & landmarks.", default=None)
+    parser.add_argument("--data-size", "-d", help="Number of examples in data set", default=None)
     parser.add_argument("--crop-size", "-c", default=224, type=int)
     parser.add_argument("--batch-size", "-b", default=64, type=int)
     parser.add_argument("--epochs", "-e", default=1, type=int)
@@ -72,7 +73,7 @@ def train(model, loader, loss_fn, optimizer, device, scheduler): # loader воз
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        scheduler.step()
+        #scheduler.step()
 
     return np.mean(train_loss)
 
@@ -114,45 +115,44 @@ def predict(model, loader, device):
     return predictions
 
 
-def main(args, loss_fn):
+def main(args):
     
     # folder for artefacts
     os.makedirs(os.path.join('runs', args.name))
 
-    # 1. prepare data & models   
+    # data transformator
     train_transforms = transforms.Compose([
         ScaleMinSideToSize((args.crop_size, args.crop_size)),
         CropCenter(args.crop_size),
         TransformByKeys(transforms.ToPILImage(), ("image",)),
         TransformByKeys(transforms.ToTensor(), ("image",)),
-        TransformByKeys(transforms.Normalize(mean=[0.485, 0.0456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
+        TransformByKeys(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), ("image",)),
     ])
-
-    print("Reading data (clean)...")
+    
+    # data loder
+    print("Reading data ...")
     train_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="train", data_size=args.data_size)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=True, drop_last=True)
     val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="val", data_size=args.data_size)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
-    device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
-
-    print("Creating model resnext50_32x4d...")
-    model = models.resnext50_32x4d(pretrained=True)
+    
+    # model
+    print("Creating model efficientnet_b3 ...")
+    model = timm.create_model('efficientnet_b3', pretrained=True, num_classes=2 * NUM_PTS) # efficientnet_b3
+    
     model.requires_grad_(True)
-    # Меняем слой fc предобученной модели на новый fc слой, который переобучим под нашу задачу
-    model.fc = nn.Linear(model.fc.in_features, 2 * NUM_PTS, bias=True)
-    model.fc.requires_grad_(True)
+    device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
     model.to(device)
     
-
-    print("Tune optimizer...")
-    #optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
-    optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
-    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
-    #loss_fn = fnn.mse_loss
-    print(f'Use l1 loss!')
-
-    # 2. train & validate
-    print("Ready for training...")
+    # loss, optimizer, scheduler
+    print("Tune optimizer ADAM, L1 loss ...")
+    loss_fn = fnn.l1_loss
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+    #optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
+    
+    # train & validate
+    print("Ready for training ...")
     best_val_loss = np.inf
     metrics = {'train_time': [], 'val_time': [], 'train_loss': [], 'val_loss': []}
 
@@ -160,7 +160,7 @@ def main(args, loss_fn):
 
         # train
         start_time_train = datetime.now()
-        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device, scheduler=scheduler)
+        train_loss = train(model, train_dataloader, loss_fn, optimizer, device=device, scheduler=None)
         metrics['train_time'].append((datetime.now() - start_time_train).seconds)
         metrics['train_loss'].append(round(train_loss, 1))
 
