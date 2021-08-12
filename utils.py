@@ -142,11 +142,11 @@ class ThousandLandmarksDataset(data.Dataset):
         # обработка разметки
         for i, line in tqdm.tqdm(enumerate(file_data), total=len(file_data), desc="load landmarks..."):
 
-            # разделение строк на train, val
-            if split == "train" and i == int(train_share * len(file_data)):
-                break  # reached end of train part of data
-            elif split == "val" and i < int(train_share * len(file_data)):
-                continue  # has not reached start of val part of data
+            # разделение строк на train, val - изменил подход: валидацию беру из начала, трэйн из конца, чтобы использовать максимум данных
+            if split == "val" and i == int((1 - train_share) * len(file_data)):
+                break  
+            elif split == "train" and i < int((1 - train_share) * len(file_data)):
+                continue  
             elements = line.strip().split("\t")
             image_name = os.path.join(images_folder_name, elements[0]) # нулевой элемент - имя файла
             

@@ -130,7 +130,7 @@ def main(args):
     ])
     
     # data loder
-    print("Reading data ...")
+    print("Reading data (dataset=val+train) ...")
     train_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="train", data_size=args.data_size)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=True, drop_last=True)
     val_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "train"), train_transforms, split="val", data_size=args.data_size)
@@ -143,7 +143,7 @@ def main(args):
 
     # load model
     with open(os.path.join('runs', args.name, f"best_model_efficientnetv2_rw_s_l1_loss_ADAM_64000_50_lr0.001.pth"), "rb") as fp:
-        best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
+        best_state_dict = torch.load(fp, map_location="cpu") 
         model.load_state_dict(best_state_dict)        
         
         
@@ -154,8 +154,8 @@ def main(args):
     # loss, optimizer, scheduler
     print("Tune ADAM + L1_loss ...")
     loss_fn = fnn.l1_loss
-    #optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
-    optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9)
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+    #optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9)
     #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=args.learning_rate, max_lr=0.1)
     
     # train & validate
