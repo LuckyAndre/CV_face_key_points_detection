@@ -118,7 +118,7 @@ def predict(model, loader, device):
 def main(args):
     
     # folder for artefacts
-    os.makedirs(os.path.join('runs', args.name))
+    #os.makedirs(os.path.join('runs', args.name))
 
     # data transformator
     train_transforms = transforms.Compose([
@@ -137,9 +137,16 @@ def main(args):
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
     
     # model
-    print("Creating model efficientnetv2_rw_s ...")
+    print("Load best model ...")
     model = timm.create_model('efficientnetv2_rw_s', pretrained=True, num_classes=2 * NUM_PTS) # efficientnet_b3
-    
+
+
+    # load model
+    with open(os.path.join('runs', args.name, f"best_model_efficientnetv2_rw_s_l1_loss_ADAM_64000_50_lr0.001.pth"), "rb") as fp:
+        best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
+        model.load_state_dict(best_state_dict)        
+        
+        
     model.requires_grad_(True)
     device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
     model.to(device)
@@ -147,8 +154,8 @@ def main(args):
     # loss, optimizer, scheduler
     print("Tune ADAM + L1_loss ...")
     loss_fn = fnn.l1_loss
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
-    #optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9)
+    #optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+    optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9)
     #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=args.learning_rate, max_lr=0.1)
     
     # train & validate
