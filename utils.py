@@ -143,7 +143,7 @@ class ThousandLandmarksDataset(data.Dataset):
         for i, line in tqdm.tqdm(enumerate(file_data), total=len(file_data), desc="load landmarks..."):
 
             # разделение строк на train, val
-            if split == "train" and i == int(train_share * len(file_data)):
+            if split == "train" and i == int((1 - train_share) * len(file_data)): # ИЗМЕНЕНИЯ ДЛЯ ВАЛИДАЦИОННОЙ ВЕРСИИ ЭКСПЕРИМЕНТА
                 break  # reached end of train part of data
             elif split == "val" and i < int(train_share * len(file_data)):
                 continue  # has not reached start of val part of data
