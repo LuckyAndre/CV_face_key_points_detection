@@ -137,19 +137,19 @@ def main(args):
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True, shuffle=False, drop_last=False)
     
     # model
-    print("Creating model efficientnet_b3 ...")
-    model = timm.create_model('efficientnet_b3', pretrained=True, num_classes=2 * NUM_PTS) # efficientnet_b3
+    print("Creating model efficientnetv2_rw_s ...")
+    model = timm.create_model('efficientnetv2_rw_s', pretrained=True, num_classes=2 * NUM_PTS) # efficientnet_b3
     
     model.requires_grad_(True)
     device = torch.device("cuda:0") if args.gpu and torch.cuda.is_available() else torch.device("cpu")
     model.to(device)
     
     # loss, optimizer, scheduler
-    print("Tune optimizer ADAM, L1 loss ...")
+    print("Tune ADAM + L1_loss ...")
     loss_fn = fnn.l1_loss
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
-    #optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
-    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=0.01, max_lr=0.1)
+    #optimizer = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9)
+    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=args.learning_rate, max_lr=0.1)
     
     # train & validate
     print("Ready for training ...")
@@ -177,25 +177,25 @@ def main(args):
                 torch.save(model.state_dict(), fp) 
                 
 
-#     # 3. predict
-#     test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), train_transforms, split="test")
-#     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
-#                                  shuffle=False, drop_last=False)
+    # 3. predict
+    test_dataset = ThousandLandmarksDataset(os.path.join(args.data_folder, "test"), train_transforms, split="test")
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.worker, pin_memory=True,
+                                 shuffle=False, drop_last=False)
 
-#     # load model
-#     with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "rb") as fp:
-#         best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
-#         model.load_state_dict(best_state_dict)
+    # load model
+    with open(os.path.join('runs', args.name, f"best_model_{args.name}.pth"), "rb") as fp:
+        best_state_dict = torch.load(fp, map_location="cpu") # TODO почему на CPU?
+        model.load_state_dict(best_state_dict)
 
-#     # save prediction
-#     test_predictions = predict(model, test_dataloader, device)
-#     with open(os.path.join('runs', args.name, f"test_predictions_{args.name}.pkl"), "wb") as fp:
-#         pickle.dump({"image_names": test_dataset.image_names,
-#                      "landmarks": test_predictions}, fp)
+    # save prediction
+    test_predictions = predict(model, test_dataloader, device)
+    with open(os.path.join('runs', args.name, f"test_predictions_{args.name}.pkl"), "wb") as fp:
+        pickle.dump({"image_names": test_dataset.image_names,
+                     "landmarks": test_predictions}, fp)
     
-#     # save submission
-#     print('Create submission...')
-#     create_submission(args.data_folder, test_predictions, os.path.join('runs', args.name, f"submit_{args.name}.csv"))
+    # save submission
+    print('Create submission...')
+    create_submission(args.data_folder, test_predictions, os.path.join('runs', args.name, f"submit_{args.name}.csv"))
 
     # save metrics
     with open(os.path.join('runs', args.name, f"metrics_{args.name}.txt"), 'w') as outfile:
