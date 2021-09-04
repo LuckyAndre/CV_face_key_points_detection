@@ -1,0 +1,27 @@
+syntax glob
+
+#IDE related files
+.idea
+*.iml
+
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+# Environments
+venv*/
+env*/
+
+
+# Misc
+.ipynb_checkpoints
+
+
+# other folders, files
+baseline_models/
+data/
+runs/
+temp/
