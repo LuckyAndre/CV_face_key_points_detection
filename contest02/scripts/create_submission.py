@@ -96,6 +96,7 @@ def main(args):
         results.append((file_name, [w[1] for w in texts]))
 
     # Generate a submission file
+    os.makedirs(f"{os.path.sep}".join(args.output_file.split(f"{os.path.sep}")[:-1]), exist_ok=True) # make folder
     with open(args.output_file, "wt") as wf:
         wf.write("file_name,plates_string\n")
         for file_name, texts in sorted(results, key=lambda x: int(os.path.splitext(x[0])[0])):

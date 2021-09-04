@@ -32,7 +32,7 @@ def main(args):
         new_item["file"] = item["file"]
         image_filename = item["file"]
         image_base, ext = os.path.splitext(image_filename)
-        mask_filename = image_base + ".mask" + ext
+        mask_filename = image_base + ".mask" + ext # записывается в ту же папку, откуда считывается!
         nums = item["nums"] # список вида [{'box': [[794, 661], [1004, 618], [1009, 670], [799, 717]], 'text': 'M938OX116'}, {'box': [[944, 268], [995, 267], [994, 283], [942, 283]], 'text': 'H881OA116'}]
 
         # проверка, что файл не существует

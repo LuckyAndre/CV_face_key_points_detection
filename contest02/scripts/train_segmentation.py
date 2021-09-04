@@ -26,7 +26,7 @@ def parse_arguments():
     parser.add_argument("-lrs", "--learning_rate_step", dest="lr_step", default=None, type=int, help="learning rate step")
     parser.add_argument("-lrg", "--learning_rate_gamma", dest="lr_gamma", default=None, type=float,
                         help="learning rate gamma")
-    parser.add_argument("-w", "--weight_bce", default=1, type=float, help="weight for BCE loss") # TODO попробовать разные коэффициенты
+    parser.add_argument("-w", "--weight_bce", dest="weight_bse", default=1, type=float, help="weight for BCE loss") # TODO попробовать разные коэффициенты
     parser.add_argument("-l", "--load", dest="load", default=None, help="load file model") # TODO попробовать предобученную версию
     parser.add_argument("-o", "--output_dir", dest="output_dir", default="runs/segmentation_baseline",
                         help="dir to save log and models")
@@ -46,16 +46,16 @@ def validate(model, val_dataloader, device):
     return np.mean(val_dice)
 
 # ПРОВЕРИЛ
-def train(model, optimizer, criterion, scheduler, train_dataloader, logger, device=None):
+def train(model, optimizer, criterion, criterion2, scheduler, train_dataloader, logger, device=None):
     model.train()
     epoch_losses = []
     epoch_bce_losses, epoch_dice_losses = [], []
     tqdm_iter = tqdm.tqdm(enumerate(train_dataloader), total=len(train_dataloader))
     for i, batch in tqdm_iter:
-        imgs, true_masks = batch
-        masks_pred = model(imgs.to(device)) # TODO проверить, что размер матрицы с прогнозом совпадает по размеру с матрицей входной
-        masks_probs = torch.sigmoid(masks_pred) # TODO обратить внимание!
-
+        imgs, true_masks = batch # imgs: B x 3 x args.image_size x args.image_size
+        masks_pred = model(imgs.to(device)) # masks_pred: B x 1 x args.image_size x args.image_size
+        masks_probs = torch.sigmoid(masks_pred) # переводим в вероятность
+        
         bce_loss_value, dice_loss_value = criterion(masks_probs.cpu().view(-1), true_masks.view(-1))
         loss = bce_loss_value + dice_loss_value
 
@@ -105,7 +105,8 @@ def main(args):
     # TODO TIP: Remember what are the problems of BCE for semantic segmentation?
     # Key words: 'background'.
     # Хорошая практика использовать ПОПИКСИЛЬНУЮ метрику и ИНТЕГРАЛЬНУЮ метрику по площади.
-    criterion = lambda x, y: (args.weight_bce * nn.BCELoss(x, y), (1. - args.weight_bce) * dice_loss(x, y))
+    criterion = lambda x, y: (args.weight_bce * nn.BCELoss()(x, y), (1. - args.weight_bce) * dice_loss(x, y)) 
+    # nn.BCELoss()(x, y) эквивалентно коду: loss = nn.BCELoss(); loss(x, y)
 
     train_transforms = get_train_transforms(args.image_size)
     train_dataset = DetectionDataset(args.data_path, os.path.join(args.data_path, "train_segmentation.json"),
@@ -116,7 +117,7 @@ def main(args):
     val_transforms = get_val_transforms(args.image_size)
     val_dataset = DetectionDataset(args.data_path, os.path.join(args.data_path, "train_segmentation.json"),
                                    transforms=val_transforms, split="val")
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=4,
+    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=8,
                                 pin_memory=True, shuffle=False, drop_last=False)
 
     logger.info(f"Length of train / val = {len(train_dataset)} / {len(val_dataset)}")
@@ -126,7 +127,7 @@ def main(args):
     for epoch in range(args.epochs):
         logger.info(f"Starting epoch {epoch + 1}/{args.epochs}.")
 
-        train_loss = train(model, optimizer, criterion, scheduler, train_dataloader, logger, device)
+        train_loss = train(model, optimizer, criterion, criterion2, scheduler, train_dataloader, logger, device)
 
         val_dice = validate(model, val_dataloader, device)
         if val_dice > best_model_info["val_dice"]:

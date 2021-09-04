@@ -29,31 +29,32 @@ def convert_to_eng(text, mapping=mapping):
     return ''.join([mapping.get(a, a) for a in text]) # изящная реализация - если элемент не найден, то берем его
 
 
-# def pred_to_string(pred, abc):
-#     seq = []
-#     for i in range(len(pred)):
-#         label = np.argmax(pred[i])
-#         seq.append(label - 1)
-#     out = []
-#     for i in range(len(seq)):
-#         if len(out) == 0:
-#             if seq[i] != -1:
-#                 out.append(seq[i])
-#         else:
-#             if seq[i] != -1 and seq[i] != seq[i - 1]:
-#                 out.append(seq[i])
-#     out = ''.join([abc[c] for c in out])
-#     return out
-#
-#
-# def decode_sequence(pred, abc):
-#     pred = pred.permute(1, 0, 2).cpu().data.numpy()
-#     outputs = []
-#     for i in range(len(pred)):
-#         outputs.append(pred_to_string(pred[i], abc))
-#     return outputs
-#
-#
+# ПРОВЕРИЛ
+def decode_sequence(pred, abc):
+    pred = pred.permute(1, 0, 2).cpu().data.numpy() # TODO: почему именно так меняются оси? проверить формат выхода
+    outputs = []
+    for i in range(len(pred)):
+        outputs.append(pred_to_string(pred[i], abc))
+    return outputs
+
+
+def pred_to_string(pred, abc):
+    seq = []
+    for i in range(len(pred)):
+        label = np.argmax(pred[i])
+        seq.append(label - 1)
+    out = []
+    for i in range(len(seq)):
+        if len(out) == 0:
+            if seq[i] != -1:
+                out.append(seq[i])
+        else:
+            if seq[i] != -1 and seq[i] != seq[i - 1]:
+                out.append(seq[i])
+    out = ''.join([abc[c] for c in out])
+    return out
+
+
 # def labels_to_text(labels, abc=abc):
 #     return ''.join(list(map(lambda x: abc[int(x) - 1], labels)))
 #
