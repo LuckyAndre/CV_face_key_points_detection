@@ -41,22 +41,22 @@ def validate(model, val_dataloader, device):
     for batch in tqdm.tqdm(val_dataloader):
         images = batch["images"].to(device)
         with torch.no_grad():
-            out = model(images, decode=True)
-        gt = (batch["seqs"].numpy() - 1).tolist() # -1 из-за разделителя # cписок истинных символов (через № позиции)
-        lens = batch["seq_lens"].numpy().tolist() # список длин ГРЗ
+            out = model(images, decode=True) # [ГРЗ_1, ГРЗ_2,.. ГРЗ_B]
+        gt = (batch["seqs"].numpy() - 1).tolist() # список B * len(ГРЗ), len(ГРЗ) может быть 8 или 9 знаков (-1 для получения индексов в алфавите кодирования)
+        lens = batch["seq_lens"].numpy().tolist() # список B, список длин ГРЗ
 
         pos, key = 0, ''
-        for i in range(len(out)):
-            gts = ''.join(abc[c] for c in gt[pos:pos + lens[i]]) # т.к. все символы в общем длинном списке, то немного сложная реализация
-            pos += lens[i]
-            if gts == out[i]: # TODO: gts - это ГРЗ в итоговом буквенно-цифровом виде, out[i] - это прогноз модели в кодах позиций символов в словаре abc. Две эти переменные не могут быть равны!
+        for i in range(len(out)): # проходимся по каждому ГРЗ
+            gts = ''.join(abc[c] for c in gt[pos:pos + lens[i]]) # ground true ГРЗ
+            pos += lens[i] # смещаем pos на длину ГРЗ
+            if gts == out[i]: # ground true ГРЗ vs predicted ГРЗ (обе переменные в буквено-цифровом виде, как мы это видем на гос автомобильных номерах)
                 tp += 1
             else:
-                avg_ed += editdistance.eval(out[i], gts) # TODO провервить выводы! По-моему здесь ошибка!
+                avg_ed += editdistance.eval(out[i], gts)
             count += 1
 
-    acc = tp / count
-    avg_ed = avg_ed / count
+    acc = tp / count # доля полностью угаданных номеров
+    avg_ed = avg_ed / count # среднее по батчу редакторское расстояние
 
     return acc, avg_ed
 
@@ -68,19 +68,23 @@ def train(model, criterion, optimizer, scheduler, train_dataloader, logger, devi
     epoch_losses = []
     tqdm_iter = tqdm.tqdm(train_dataloader)
     for i, batch in enumerate(tqdm_iter):
-        images = batch["images"].to(device) # TODO B x C x 320 x 60
-        seqs = batch["seqs"] # TODO вектор B * len(ГРЗ), len(ГРЗ) может быть 8 или 9 знаков
-        seq_lens = batch["seq_lens"] # TODO вектор B (содрежит длину номера ГРЗ в соответствующем элементе батча)
+        images = batch["images"].to(device) # B x C x 64 x 320
+        seqs = batch["seqs"] # вектор B * len(ГРЗ), len(ГРЗ) может быть 8 или 9 знаков
+        seq_lens = batch["seq_lens"] # вектор B (содрежит длину номера ГРЗ в соответствующем элементе батча)
 
-        seqs_pred = model(images).cpu() # внутри модели создается вектор фичей seq_len(20) x B x  
-        log_probs = log_softmax(seqs_pred, dim=2)
-        seq_lens_pred = torch.Tensor([seqs_pred.size(0)] * seqs_pred.size(1)).int()
+        """
+        Модель состоит из 2х блоков: блок фичей, блок RNN.
+        На входе в модель: B x C x 320 x 60.
+        Блок фичей (перед RNN) создает тензор: 20 x B x 512.
+        На выходе из модели: 20 х B х alphabet_size.
+        """
+        seqs_pred = model(images).cpu() 
+        log_probs = log_softmax(seqs_pred, dim=2) # получили вероятности
+        seq_lens_pred = torch.Tensor([seqs_pred.size(0)] * seqs_pred.size(1)).int() # вектор длины B: [20, 20, ... 20] 
 
-        loss = criterion(log_probs, seqs, seq_lens_pred, seq_lens)
+        loss = criterion(log_probs, seqs, seq_lens_pred, seq_lens) # ctc_loss(input, target, input_lengths, target_lengths)
         epoch_losses.append(loss.item())
         tqdm_iter.set_description(f"mean loss: {np.mean(epoch_losses):.4f}")
-        
-        #from ipdb import set_trace; set_trace()
 
         optimizer.zero_grad()
         loss.backward()

@@ -26,23 +26,19 @@ class FeatureExtractor(nn.Module):
             - x: Tensor of features (shaped B x C x H x W).
 
         Returns:
-            см. комментарий ниже
+            - x: Tensor of features (shaped seq_len x B x Hin) # see requirements of RNN nets
         """
         # B x 512 x 1 x 10
         x = x.permute(0, 3, 2, 1).contiguous() # этот permute нужен чтобы "10" перенести в размерность 1 (это позволит применить свертку и увеличить размер с 10 до 20)
         # B x 10 x 1 x 512
         x = self.proj(x) # cвертка для увеличения размера 10 -> 20
         # B x 20 x 1 x 512
-        x = x.permute(0, 2, 3, 1).contiguous() # эта штука не нужна - см. комментарий ниже!
-        """
-        # B x 1 x 512 x 20
-        Последний указнный permute на мой взгляд не нужен!
-        Нам нужно тензор подавать в RNN, где требуется последовательность seq_len x B x H (т.е. 20 x B x 512)
-        Поэтому правильнее здесь сразу привести к этой размерности!
-        1) убираем x = x.permute(0, 2, 3, 1).contiguous()
-        2) x = x.squeeze(2)
-        3) x = x.permute(1, 0, 2).contiguous()
-        """
+        
+        # Преобразование к формату, требуемому в RNN seq_len x B x Hin (т.е. 20 x B x 512)
+        x = x.squeeze(2)
+        # B x 20 x 512
+        x = x.permute(1, 0, 2).contiguous()
+        # 20 x B x 512
 
         return x
 
@@ -89,25 +85,7 @@ class SequencePredictor(nn.Module):
         h = torch.zeros(self.rnn.num_layers * num_directions, batch_size, self.rnn.hidden_size)
         return h
 
-    def _reshape_features(self, x):
-        """Change dimensions of x to fit RNN expected input.
-
-        Args:
-            - x: Tensor x shaped (B x (C=1) x H x W).
-
-        Returns:
-            New tensor shaped (W x B x H).
-        """
-        # B x (C=1) x H x W
-        x = x.squeeze(1)
-        # B x H x W
-        x = x.permute(2, 0, 1)
-        # W x B x H
-
-        return x
-
     def forward(self, x):
-        x = self._reshape_features(x)
         batch_size = x.size(1)
         h_0 = self._init_hidden(batch_size)
         h_0 = h_0.to(x.device)

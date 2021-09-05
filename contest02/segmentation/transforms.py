@@ -111,7 +111,7 @@ def get_train_transforms(image_size):
     return Compose([
         Normalize(),
         Crop(min_size=2/3, min_ratio=1.0, max_ratio=1.0, p=0.5), # если min_ratio=max_ratio, то вырезаться будет квадратное изображение, размером от 2/3 до 1 (относительно исходного)
-        #Flip(p=0.05), в контексте данной задачи считаю, что flip аугментация вдоль оси Y не нужна
+        Flip(p=0.05), # в контексте данной задачи считаю, что flip аугментация вдоль оси Y не нужна
         Pad(max_size=0.6, p=0.25), # рамка размером от 0 до 0.6 (относительно меньшего из размеров)
         Resize(size=(image_size, image_size), keep_aspect=True)
     ])
