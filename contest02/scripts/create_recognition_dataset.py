@@ -25,7 +25,6 @@ def parse_arguments():
 # ПРОВЕРИЛ
 def get_crop(image, box):
     # TODO TIP: Maybe adding some margin could help.
-
     # box - это матрица 4 х 2 [[x1, y1], [x2, y2], [x3, y3], [x4, y4]] c координатами угловых точек номера
     # здесь выполняется проверка, чтобы bbox не выходила за границы изображения
     x_min = np.clip(min(box[:, 0]), 0, image.shape[1])

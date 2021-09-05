@@ -68,18 +68,19 @@ def train(model, criterion, optimizer, scheduler, train_dataloader, logger, devi
     epoch_losses = []
     tqdm_iter = tqdm.tqdm(train_dataloader)
     for i, batch in enumerate(tqdm_iter):
-        images = batch["images"].to(device)
-        seqs = batch["seqs"]
-        seq_lens = batch["seq_lens"]
+        images = batch["images"].to(device) # TODO B x C x 320 x 60
+        seqs = batch["seqs"] # TODO вектор B * len(ГРЗ), len(ГРЗ) может быть 8 или 9 знаков
+        seq_lens = batch["seq_lens"] # TODO вектор B (содрежит длину номера ГРЗ в соответствующем элементе батча)
 
-        # TODO TIP: What happens here is explained in seminar 06.
-        seqs_pred = model(images).cpu() # TODO: запустить код и проверить размерности - тогда разберусь, что здесь происходит!
+        seqs_pred = model(images).cpu() # внутри модели создается вектор фичей seq_len(20) x B x  
         log_probs = log_softmax(seqs_pred, dim=2)
         seq_lens_pred = torch.Tensor([seqs_pred.size(0)] * seqs_pred.size(1)).int()
 
         loss = criterion(log_probs, seqs, seq_lens_pred, seq_lens)
         epoch_losses.append(loss.item())
         tqdm_iter.set_description(f"mean loss: {np.mean(epoch_losses):.4f}")
+        
+        #from ipdb import set_trace; set_trace()
 
         optimizer.zero_grad()
         loss.backward()
@@ -125,7 +126,7 @@ def main(args):
     # You may benefit from learning about samplers (at torch.utils.data).
     # TODO TIP: And of course given lack of data you should augment it.
     image_w, image_h = list(map(int, args.input_wh.split('x')))
-    train_transforms = get_train_transforms((image_w, image_h), args.r, args.p) # size, rotation, padding
+    train_transforms = get_train_transforms((image_w, image_h), args.rotation, args.padding) # size, rotation, padding
     train_dataset = RecognitionDataset(args.data_path, os.path.join(args.data_path, "train_recognition.json"),
                                        abc=abc, transforms=train_transforms, split="train")
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8,
