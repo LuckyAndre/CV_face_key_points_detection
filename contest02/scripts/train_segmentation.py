@@ -110,13 +110,13 @@ def main(args):
 
     train_transforms = get_train_transforms(args.image_size)
     train_dataset = DetectionDataset(args.data_path, os.path.join(args.data_path, "train_segmentation.json"),
-                                     transforms=train_transforms, split="train")
+                                     transforms=train_transforms, split="train", data_limit=10_000)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=8,
                                   pin_memory=True, shuffle=True, drop_last=True)
 
     val_transforms = get_val_transforms(args.image_size)
     val_dataset = DetectionDataset(args.data_path, os.path.join(args.data_path, "train_segmentation.json"),
-                                   transforms=val_transforms, split="val")
+                                   transforms=val_transforms, split="val", data_limit=10_000)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=8,
                                 pin_memory=True, shuffle=False, drop_last=False)
 

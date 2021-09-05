@@ -56,7 +56,7 @@ def main(args):
         image_src = cv2.cvtColor(image_src, cv2.COLOR_BGR2RGB) # H x W x 3
 
         # 1. Segmentation.
-        image, k, dw, dh = prepare_for_segmentation(image_src.astype(np.float) / 255., (256, 256)) # size_h x size_w x 3: трансформации аналогичные как при обучении
+        image, k, dw, dh = prepare_for_segmentation(image_src.astype(np.float) / 255., (512, 512)) # size_h x size_w x 3: трансформации аналогичные как при обучении
         """
         prepare_for_segmentation фактически выполняет трансформации аналогичные тем, что делались при обучении, со следующими исключениями:
         - при обучении на вход подавалось изображение, маска изображения. При инференсе - только изображение

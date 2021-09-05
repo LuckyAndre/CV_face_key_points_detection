@@ -10,7 +10,7 @@ TRAIN_SIZE = 0.8
 
 class DetectionDataset(Dataset):
 
-    def __init__(self, data_path, config_file=None, transforms=None, split="train"):
+    def __init__(self, data_path, config_file=None, transforms=None, split="train", data_limit=None):
         super(DetectionDataset, self).__init__()
 
         # первичные переменные
@@ -23,13 +23,19 @@ class DetectionDataset(Dataset):
 
         # сплит данных на трэйн и тест
         if self.split is not None:
-            train_size = int(len(self.image_filenames) * TRAIN_SIZE)
+            
+            # ограничиваю объем данных, чтобы делать быстрые эксперименты
+            if data_limit is None: data_limit = len(self.image_filenames) 
+            assert data_limit <= len(self.image_filenames), 'data_limit could not exceed available for training data'
+            
+            # делаю сплит данных
+            train_size = int(data_limit * TRAIN_SIZE)
             if self.split == "train":
                 self.image_filenames = self.image_filenames[:train_size]
                 self.mask_filenames = self.mask_filenames[:train_size]
             elif split == "val":
-                self.image_filenames = self.image_filenames[train_size:]
-                self.mask_filenames = self.mask_filenames[train_size:]
+                self.image_filenames = self.image_filenames[train_size: data_limit]
+                self.mask_filenames = self.mask_filenames[train_size: data_limit]
             else:
                 raise NotImplementedError(split)
 
