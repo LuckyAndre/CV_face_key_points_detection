@@ -145,20 +145,24 @@ def main(args):
     logger.info(f"Length of train / val = {len(train_dataset)}/ {len(val_dataset)}")
     logger.info(f"Number of batches of train / val = {len(train_dataloader)} / {len(val_dataloader)}")
 
-    best_val_acc = -1
+    #best_val_acc = -1
+    best_val_acc_ed = 1_000_000
     for epoch in range(args.epochs):
         logger.info(f"Starting epoch {epoch + 1} / {args.epochs}.")
 
         train_loss = train(model, criterion, optimizer, scheduler, train_dataloader, logger, device)
         val_acc, val_acc_ed = validate(model, val_dataloader, device)
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        #if val_acc > best_val_acc:
+            #best_val_acc = val_acc
+        if val_acc_ed < best_val_acc_ed:
+            best_val_acc_ed = val_acc_ed
             with open(os.path.join(args.output_dir, "CP-best.pth"), "wb") as fp:
                 torch.save(model.state_dict(), fp)
             logger.info(f"Valid acc: {val_acc:.5f}, acc_ed: {val_acc_ed:.5f} (best)")
         else:
-            logger.info(f"Valid acc: {val_acc:.5f}, acc_ed: {val_acc_ed:.5f} (best {best_val_acc:.5f})")
+            #logger.info(f"Valid acc: {val_acc:.5f}, acc_ed: {val_acc_ed:.5f} (best {best_val_acc:.5f})")
+            logger.info(f"Valid acc: {val_acc:.5f}, acc_ed: {val_acc_ed:.5f} (best {best_val_acc_ed:.5f})")
 
     with open(os.path.join(args.output_dir, "CP-last.pth"), "wb") as fp:
         torch.save(model.state_dict(), fp)

@@ -46,7 +46,7 @@ def validate(model, val_dataloader, device):
     return np.mean(val_dice)
 
 # ПРОВЕРИЛ
-def train(model, optimizer, criterion, criterion2, scheduler, train_dataloader, logger, device=None):
+def train(model, optimizer, criterion, scheduler, train_dataloader, logger, device=None):
     model.train()
     epoch_losses = []
     epoch_bce_losses, epoch_dice_losses = [], []
@@ -127,7 +127,7 @@ def main(args):
     for epoch in range(args.epochs):
         logger.info(f"Starting epoch {epoch + 1}/{args.epochs}.")
 
-        train_loss = train(model, optimizer, criterion, criterion2, scheduler, train_dataloader, logger, device)
+        train_loss = train(model, optimizer, criterion, scheduler, train_dataloader, logger, device)
 
         val_dice = validate(model, val_dataloader, device)
         if val_dice > best_model_info["val_dice"]:
