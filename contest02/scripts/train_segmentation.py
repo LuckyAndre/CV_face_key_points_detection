@@ -18,6 +18,7 @@ from inference_utils import get_logger
 def parse_arguments():
     parser = ArgumentParser()
     parser.add_argument("-d", "--data_path", dest="data_path", type=str, default=None, help="path to the data")
+    parser.add_argument("-dl", "--data_limit", dest="data_limit", type=int, default=None, help="limit on train data")
     parser.add_argument("-e", "--epochs", dest="epochs", default=10, type=int, help="number of epochs")
     parser.add_argument("-b", "--batch_size", dest="batch_size", default=80, type=int, help="batch size")
     parser.add_argument("-s", "--image_size", dest="image_size", default=256, type=int, help="input image size")
@@ -110,13 +111,13 @@ def main(args):
 
     train_transforms = get_train_transforms(args.image_size)
     train_dataset = DetectionDataset(args.data_path, os.path.join(args.data_path, "train_segmentation.json"),
-                                     transforms=train_transforms, split="train", data_limit=10_000)
+                                     transforms=train_transforms, split="train", data_limit=args.data_limit)
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=8,
                                   pin_memory=True, shuffle=True, drop_last=True)
 
     val_transforms = get_val_transforms(args.image_size)
     val_dataset = DetectionDataset(args.data_path, os.path.join(args.data_path, "train_segmentation.json"),
-                                   transforms=val_transforms, split="val", data_limit=10_000)
+                                   transforms=val_transforms, split="val", data_limit=args.data_limit)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, num_workers=8,
                                 pin_memory=True, shuffle=False, drop_last=False)
 
